@@ -4,10 +4,19 @@ const bcrypt = require('bcrypt');
 // Obtener todos los usuarios
 exports.getAllUsers = async (req, res) => {
     try {
-        const [results] = await db.query('SELECT id, username, email, role FROM users');
-        res.json(results);
+        const page = parseInt(req.query.page) || 1;
+        const pageSize = parseInt(req.query.pageSize) || 10;
+        const offset = (page - 1) * pageSize;
+
+        const [[{ total }]] = await db.query('SELECT COUNT(*) AS total FROM users');
+        const [results] = await db.query(
+            'SELECT id, username, email, role FROM users ORDER BY id DESC LIMIT ? OFFSET ?',
+            [pageSize, offset]
+        );
+
+        res.json({ total, page, pageSize, data: results });
     } catch (err) {
-        res.status(500).json({ error: err });
+        res.status(500).json({ error: err.message });
     }
 };
 
