@@ -6,18 +6,31 @@ exports.getAllAperturasCierres = async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const pageSize = parseInt(req.query.pageSize) || 10;
         const offset = (page - 1) * pageSize;
+        const search = req.query.search ? req.query.search.toLowerCase() : '';
 
-        const [[{ total }]] = await db.query('SELECT COUNT(*) AS total FROM aperturas_cierres');
-        const [results] = await db.query(
-            'SELECT * FROM aperturas_cierres ORDER BY id DESC LIMIT ? OFFSET ?',
-            [pageSize, offset]
-        );
+        let totalQuery = 'SELECT COUNT(*) AS total FROM aperturas_cierres';
+        let dataQuery = 'SELECT * FROM aperturas_cierres';
+        let params = [];
+
+        if (search) {
+            totalQuery += ` WHERE LOWER(CAST(numero_caja AS CHAR)) LIKE ? OR LOWER(CAST(id_usuario_apertura AS CHAR)) LIKE ? OR LOWER(estado) LIKE ?`;
+            dataQuery += ` WHERE LOWER(CAST(numero_caja AS CHAR)) LIKE ? OR LOWER(CAST(id_usuario_apertura AS CHAR)) LIKE ? OR LOWER(estado) LIKE ?`;
+            const likeSearch = `%${search}%`;
+            params.push(likeSearch, likeSearch, likeSearch);
+        }
+
+        dataQuery += ' ORDER BY id DESC LIMIT ? OFFSET ?';
+        params.push(pageSize, offset);
+
+        const [[{ total }]] = await db.query(totalQuery, params.slice(0, search ? 3 : 0));
+        const [results] = await db.query(dataQuery, params);
 
         res.json({ total, page, pageSize, data: results });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
+
 
 
 

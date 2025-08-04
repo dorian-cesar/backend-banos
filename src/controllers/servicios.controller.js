@@ -5,13 +5,27 @@ exports.getAllServicios = async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const pageSize = parseInt(req.query.pageSize) || 10;
+        const search = req.query.search ? `%${req.query.search}%` : null;
         const offset = (page - 1) * pageSize;
 
-        const [[{ total }]] = await db.query('SELECT COUNT(*) AS total FROM servicios');
-        const [results] = await db.query(
-            'SELECT * FROM servicios ORDER BY id DESC LIMIT ? OFFSET ?',
-            [pageSize, offset]
-        );
+        let totalQuery = 'SELECT COUNT(*) AS total FROM servicios';
+        let dataQuery = 'SELECT * FROM servicios';
+
+        let countParams = [];
+        let dataParams = [];
+
+        if (search) {
+            totalQuery += ' WHERE nombre LIKE ? OR tipo LIKE ?';
+            dataQuery += ' WHERE nombre LIKE ? OR tipo LIKE ?';
+            countParams = [search, search];
+            dataParams = [search, search];
+        }
+
+        dataQuery += ' ORDER BY id DESC LIMIT ? OFFSET ?';
+        dataParams.push(pageSize, offset);
+
+        const [[{ total }]] = await db.query(totalQuery, countParams);
+        const [results] = await db.query(dataQuery, dataParams);
 
         res.json({ total, page, pageSize, data: results });
     } catch (err) {
@@ -19,6 +33,15 @@ exports.getAllServicios = async (req, res) => {
     }
 };
 
+exports.getTiposServicios = async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT DISTINCT tipo FROM servicios ORDER BY tipo ASC');
+        const tipos = rows.map(r => r.tipo);
+        res.json(tipos);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
 
 // Obtener un servicio por ID
 exports.getServicioById = async (req, res) => {

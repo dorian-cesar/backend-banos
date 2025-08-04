@@ -6,18 +6,30 @@ exports.getAllCajas = async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const pageSize = parseInt(req.query.pageSize) || 10;
         const offset = (page - 1) * pageSize;
+        const search = req.query.search ? req.query.search.toLowerCase() : '';
 
-        const [[{ total }]] = await db.query('SELECT COUNT(*) AS total FROM cajas');
-        const [results] = await db.query(
-            'SELECT * FROM cajas ORDER BY id DESC LIMIT ? OFFSET ?',
-            [pageSize, offset]
-        );
+        let totalQuery = 'SELECT COUNT(*) AS total FROM cajas';
+        let dataQuery = 'SELECT * FROM cajas';
+        let params = [];
+
+        if (search) {
+            totalQuery += ' WHERE LOWER(nombre) LIKE ? OR CAST(numero_caja AS CHAR) LIKE ?';
+            dataQuery += ' WHERE LOWER(nombre) LIKE ? OR CAST(numero_caja AS CHAR) LIKE ?';
+            params.push(`%${search}%`, `%${search}%`);
+        }
+
+        dataQuery += ' ORDER BY id DESC LIMIT ? OFFSET ?';
+        params.push(pageSize, offset);
+
+        const [[{ total }]] = await db.query(totalQuery, params.slice(0, search ? 2 : 0));
+        const [results] = await db.query(dataQuery, params);
 
         res.json({ total, page, pageSize, data: results });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
+
 
 
 // Obtener caja por ID

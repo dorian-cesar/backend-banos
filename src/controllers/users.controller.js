@@ -1,17 +1,33 @@
 const db = require('../config/db.config');
 const bcrypt = require('bcrypt');
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmail(email) {
+    return EMAIL_REGEX.test(email);
+}
+
 // Obtener todos los usuarios
 exports.getAllUsers = async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const pageSize = parseInt(req.query.pageSize) || 10;
+        const search = req.query.search ? `%${req.query.search}%` : '%%';
         const offset = (page - 1) * pageSize;
 
-        const [[{ total }]] = await db.query('SELECT COUNT(*) AS total FROM users');
+        const [[{ total }]] = await db.query(
+            `SELECT COUNT(*) AS total 
+             FROM users 
+             WHERE username LIKE ? OR email LIKE ? OR role LIKE ?`,
+            [search, search, search]
+        );
+
         const [results] = await db.query(
-            'SELECT id, username, email, role FROM users ORDER BY id DESC LIMIT ? OFFSET ?',
-            [pageSize, offset]
+            `SELECT * FROM users
+             WHERE username LIKE ? OR email LIKE ? OR role LIKE ?
+             ORDER BY id DESC
+             LIMIT ? OFFSET ?`,
+            [search, search, search, pageSize, offset]
         );
 
         res.json({ total, page, pageSize, data: results });
@@ -36,6 +52,20 @@ exports.getUserById = async (req, res) => {
     }
 };
 
+// Nuevo endpoint para roles
+exports.getRoles = async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            'SELECT DISTINCT role FROM users ORDER BY role ASC'
+        );
+        const roles = rows.map(r => r.role);
+        res.json(roles);
+    } catch (err) {
+        console.error('Error obteniendo roles:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+};
+
 
 // Crear nuevo usuario
 exports.createUser = async (req, res) => {
@@ -44,6 +74,14 @@ exports.createUser = async (req, res) => {
     if (!username || !email || !password || !role) {
         return res.status(400).json({ error: 'Todos los campos son requeridos' });
     }
+
+    if (!isValidEmail(email)) {
+        return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    // if (password.length < 6) {
+    //     return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+    // }
 
     const [existing] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length > 0) {
@@ -68,10 +106,27 @@ exports.updateUser = async (req, res) => {
     const { id } = req.params;
     const { username, email, password, role } = req.body;
 
+    if (!username || !email || !role) {
+        return res.status(400).json({ error: 'username, email y role son requeridos' });
+    }
+
+    if (!isValidEmail(email)) {
+        return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    // if (password && password.length < 6) {
+    //     return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres si se proporciona' });
+    // }
+
     try {
+        // Verificar si el email cambió y si está en uso por otro
+        const [existingEmailRows] = await db.query('SELECT id FROM users WHERE email = ? AND id != ?', [email, id]);
+        if (existingEmailRows.length > 0) {
+            return res.status(409).json({ error: 'El email ya está en uso por otro usuario' });
+        }
 
         let updateQuery = 'UPDATE users SET username = ?, email = ?, role = ?';
-        let values = [username, email, role];
+        const values = [username, email, role.toLowerCase()];
 
         if (password) {
             const hashedPassword = await bcrypt.hash(password, 10);
@@ -82,7 +137,10 @@ exports.updateUser = async (req, res) => {
         updateQuery += ' WHERE id = ?';
         values.push(id);
 
-        await db.query(updateQuery, values);
+        const [result] = await db.query(updateQuery, values);
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
 
         res.json({ message: 'Usuario actualizado' });
     } catch (error) {
