@@ -1,19 +1,39 @@
 # Backend para Mantenedor de Baños
 
-Este backend provee endpoints para manejar las entidades principales: Usuarios, Servicios, Movimientos, Cajas y Aperturas/Cierres de caja.
+
+Este proyecto corresponde a un backend desarrollado con Node.js, Express y MySQL para la gestión de:
+
+- Cajas
+- Aperturas y cierres de caja
+- Servicios
+- Movimientos (ingresos y egresos)
+- Usuarios (con autenticación y roles)
+
+> Proyecto desarrollado con soporte para JWT, paginación, búsqueda, validaciones de integridad y despliegue en entorno seguro HTTPS.
+
+---
 
 ## Base URL
 ```
-http://localhost:3000/api
+http://localhost:4000/api
 ```
+
+---
 
 ## Endpoints
 
-### 1. Usuarios (`/users`)
+### 1. Autenticación (`/auth`)
+| Método | Endpoint              | Descripción                  |
+| ------ | ----------------- | ---------------------------- |
+| POST   | `/auth/login` | Login con email y contraseña |
+
+
+### 2. Usuarios (`/users`)
 | Método | Endpoint     | Descripción                  |
 | ------ | ------------ | ---------------------------- |
 | GET    | `/users`     | Obtener todos los usuarios   |
 | GET    | `/users/:id` | Obtener usuario por ID       |
+| GET    | `/users/roles` | Obtener roles únicos  |
 | POST   | `/users`     | Crear nuevo usuario          |
 | PUT    | `/users/:id` | Actualizar usuario existente |
 | DELETE | `/users/:id` | Eliminar usuario             |
@@ -31,10 +51,11 @@ Content-Type: application/json
 }
 ```
 
-### 2. Servicios (`/servicios`)
+### 3. Servicios (`/servicios`)
 | Método | Endpoint         | Descripción                   |
 | ------ | ---------------- | ----------------------------- |
 | GET    | `/services`     | Listar todos los servicios    |
+| GET    | `/services/tipo`     | 	Listar tipos únicos    |
 | GET    | `/services/:id` | Obtener servicio por ID       |
 | POST   | `/services`     | Crear nuevo servicio          |
 | PUT    | `/services/:id` | Actualizar servicio existente |
@@ -54,7 +75,7 @@ Content-Type: application/json
 }
 ```
 
-### 3. Movimientos (`/movimientos`)
+### 4. Movimientos (`/movimientos`)
 | Método | Endpoint           | Descripción                     |
 | ------ | ------------------ | ------------------------------- |
 | GET    | `/movimientos`     | Listar todos los movimientos    |
@@ -81,7 +102,7 @@ Content-Type: application/json
 }
 ```
 
-### 4. Cajas (`/cajas`)
+### 5. Cajas (`/cajas`)
 | Método | Endpoint     | Descripción               |
 | ------ | ------------ | ------------------------- |
 | GET    | `/cajas`     | Listar todas las cajas    |
@@ -104,7 +125,7 @@ Content-Type: application/json
 }
 ```
 
-### 5. Aperturas y Cierres (`/aperturas-cierres`)
+### 6. Aperturas y Cierres (`/aperturas-cierres`)
 | Método | Endpoint                 | Descripción                   |
 | ------ | ------------------------ | ----------------------------- |
 | GET    | `/aperturas-cierres`     | Listar todos los registros    |

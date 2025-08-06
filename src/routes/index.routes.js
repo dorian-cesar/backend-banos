@@ -6,6 +6,7 @@ const serviciosRoutes = require('./servicios.routes')
 const movimientosRoutes = require('./movimientos.routes');
 const cajasRoutes = require('./cajas.routes');
 const aperturasCierresRoutes = require('./aperturasCierres.routes');
+const helpersRoutes = require('./helpers.routes')
 const authRoutes = require('./auth.routes');
 
 
@@ -14,6 +15,8 @@ router.use('/services', serviciosRoutes);
 router.use('/movimientos', movimientosRoutes);
 router.use('/cajas', cajasRoutes);
 router.use('/aperturas-cierres', aperturasCierresRoutes);
+router.use('/helpers', helpersRoutes)
+
 router.use('/auth', authRoutes);
 
 module.exports = router;
