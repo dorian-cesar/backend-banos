@@ -11,7 +11,6 @@ exports.getAllAperturasCierres = async (req, res) => {
         const filtros = [];
         const params = [];
 
-        // Filtros específicos
         if (req.query.id_usuario_apertura) {
             filtros.push('ac.id_usuario_apertura = ?');
             params.push(req.query.id_usuario_apertura);
@@ -22,7 +21,6 @@ exports.getAllAperturasCierres = async (req, res) => {
             params.push(req.query.id_usuario_cierre);
         }
 
-        // Filtro genérico para usuario (apertura o cierre)
         if (req.query.id_usuario && !req.query.id_usuario_apertura && !req.query.id_usuario_cierre) {
             filtros.push('(ac.id_usuario_apertura = ? OR ac.id_usuario_cierre = ?)');
             params.push(req.query.id_usuario, req.query.id_usuario);
@@ -48,16 +46,15 @@ exports.getAllAperturasCierres = async (req, res) => {
             params.push(req.query.fecha_fin);
         }
 
-        // Búsqueda libre (por si usas una barra de búsqueda adicional)
         if (search) {
             filtros.push(`
-                (
-                    LOWER(CAST(ac.numero_caja AS CHAR)) LIKE ? OR
-                    LOWER(u1.username) LIKE ? OR
-                    LOWER(u2.username) LIKE ? OR
-                    LOWER(ac.estado) LIKE ?
-                )
-            `);
+          (
+            LOWER(u1.username) LIKE ? OR
+            LOWER(u2.username) LIKE ? OR
+            LOWER(cj.nombre) LIKE ? OR
+            LOWER(ac.estado) LIKE ?
+          )
+        `);
             params.push(search, search, search, search);
         }
 
@@ -66,12 +63,12 @@ exports.getAllAperturasCierres = async (req, res) => {
         // Conteo total
         const [countResult] = await db.query(
             `
-            SELECT COUNT(*) AS total
-            FROM aperturas_cierres ac
-            LEFT JOIN users u1 ON ac.id_usuario_apertura = u1.id
-            LEFT JOIN users u2 ON ac.id_usuario_cierre = u2.id
-            ${whereClause}
-            `,
+                SELECT COUNT(*) AS total
+                FROM aperturas_cierres ac
+                LEFT JOIN users u1 ON ac.id_usuario_apertura = u1.id
+                LEFT JOIN users u2 ON ac.id_usuario_cierre = u2.id
+                JOIN cajas cj ON ac.numero_caja = cj.numero_caja
+                ${whereClause}`,
             params
         );
         const total = countResult[0].total;
@@ -79,19 +76,19 @@ exports.getAllAperturasCierres = async (req, res) => {
         // Consulta paginada
         const [results] = await db.query(
             `
-            SELECT 
-                ac.*,
-                u1.username AS nombre_usuario_apertura,
-                u2.username AS nombre_usuario_cierre,
-                cj.nombre AS nombre_caja
-            FROM aperturas_cierres ac
-            LEFT JOIN users u1 ON ac.id_usuario_apertura = u1.id
-            LEFT JOIN users u2 ON ac.id_usuario_cierre = u2.id
-            JOIN cajas cj ON ac.numero_caja = cj.numero_caja
-            ${whereClause}
-            ORDER BY ac.fecha_apertura DESC, ac.hora_apertura DESC
-            LIMIT ? OFFSET ?
-            `,
+        SELECT 
+          ac.*,
+          u1.username AS nombre_usuario_apertura,
+          u2.username AS nombre_usuario_cierre,
+          cj.nombre AS nombre_caja
+        FROM aperturas_cierres ac
+        LEFT JOIN users u1 ON ac.id_usuario_apertura = u1.id
+        LEFT JOIN users u2 ON ac.id_usuario_cierre = u2.id
+        JOIN cajas cj ON ac.numero_caja = cj.numero_caja
+        ${whereClause}
+        ORDER BY ac.fecha_apertura DESC, ac.hora_apertura DESC
+        LIMIT ? OFFSET ?
+        `,
             [...params, pageSize, offset]
         );
 
@@ -101,6 +98,7 @@ exports.getAllAperturasCierres = async (req, res) => {
         res.status(500).json({ error: 'Error al obtener datos' });
     }
 };
+
 
 
 

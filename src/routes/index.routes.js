@@ -1,6 +1,8 @@
 const express = require('express')
 const router = express.Router();
 
+const authenticateToken = require('../middlewares/auth.middleware');
+
 const usersRoutes = require('./users.routes')
 const serviciosRoutes = require('./servicios.routes')
 const movimientosRoutes = require('./movimientos.routes');
@@ -9,14 +11,13 @@ const aperturasCierresRoutes = require('./aperturasCierres.routes');
 const helpersRoutes = require('./helpers.routes')
 const authRoutes = require('./auth.routes');
 
-
-router.use('/users', usersRoutes);
-router.use('/services', serviciosRoutes);
-router.use('/movimientos', movimientosRoutes);
-router.use('/cajas', cajasRoutes);
-router.use('/aperturas-cierres', aperturasCierresRoutes);
-router.use('/helpers', helpersRoutes)
-
 router.use('/auth', authRoutes);
+
+router.use('/users', authenticateToken, usersRoutes);
+router.use('/services', authenticateToken, serviciosRoutes);
+router.use('/movimientos', authenticateToken, movimientosRoutes);
+router.use('/cajas', authenticateToken, cajasRoutes);
+router.use('/aperturas-cierres', authenticateToken, aperturasCierresRoutes);
+router.use('/helpers', authenticateToken, helpersRoutes);
 
 module.exports = router;

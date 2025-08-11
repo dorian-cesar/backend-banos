@@ -15,10 +15,10 @@ exports.getAllServicios = async (req, res) => {
         let dataParams = [];
 
         if (search) {
-            totalQuery += ' WHERE nombre LIKE ? OR tipo LIKE ?';
-            dataQuery += ' WHERE nombre LIKE ? OR tipo LIKE ?';
-            countParams = [search, search];
-            dataParams = [search, search];
+            totalQuery += ' WHERE nombre LIKE ? OR tipo LIKE ? OR estado LIKE ?';
+            dataQuery += ' WHERE nombre LIKE ? OR tipo LIKE ? OR estado LIKE ?';
+            countParams = [search, search, search];
+            dataParams = [search, search, search];
         }
 
         dataQuery += ' ORDER BY id DESC LIMIT ? OFFSET ?';

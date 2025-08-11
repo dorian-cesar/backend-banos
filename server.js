@@ -1,5 +1,6 @@
 const express = require('express');
 const https = require('https');
+const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
@@ -31,6 +32,11 @@ const sslOptions = {
 };
 
 // Iniciar servidor HTTPS
+
 https.createServer(sslOptions, app).listen(PORT, () => {
   console.log(`Servidor HTTPS escuchando en https://localhost:${PORT}`);
 });
+
+// http.createServer(app).listen(PORT, () => {
+//   console.log(`Servidor HTTP escuchando en http://localhost:${PORT}`);
+// });

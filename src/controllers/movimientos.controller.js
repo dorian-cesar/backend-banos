@@ -16,7 +16,7 @@ exports.getAllMovimientos = async (req, res) => {
         const filtros = [];
         const params = [];
 
-        // Filtros dinámicos
+        // Filtros dinámicos exactos
         if (req.query.id_usuario) {
             filtros.push('m.id_usuario = ?');
             params.push(req.query.id_usuario);
@@ -47,52 +47,62 @@ exports.getAllMovimientos = async (req, res) => {
             params.push(req.query.fecha_fin);
         }
 
-        // Filtro por búsqueda
+        // Filtro de búsqueda global con LIKE para varios campos
         if (search) {
-            filtros.push(`(m.codigo LIKE ? OR u.username LIKE ? OR s.nombre LIKE ?)`);
-            params.push(search, search, search);
+            filtros.push(`(
+                (LOWER(u.username) LIKE ? OR 
+                 LOWER(s.nombre) LIKE ? OR 
+                 LOWER(c.nombre) LIKE ? OR 
+                 LOWER(m.medio_pago) LIKE ? OR
+                 CAST(m.numero_caja AS CHAR) LIKE ? OR
+                 LOWER(m.codigo) LIKE ?)
+            `);
+            params.push(search, search, search, search);
         }
 
-        // Base queries
-        let baseFrom = `
-            FROM movimientos m
-            JOIN users u ON m.id_usuario = u.id
-            JOIN servicios s ON m.id_servicio = s.id
-            JOIN cajas c ON m.numero_caja = c.numero_caja
-        `;
+        // Construir cláusula WHERE
+        const whereClause = filtros.length > 0 ? 'WHERE ' + filtros.join(' AND ') : '';
 
-        let whereClause = filtros.length ? 'WHERE ' + filtros.join(' AND ') : '';
-
-        // Total count
-        const [countResult] = await db.query(
-            `SELECT COUNT(*) AS total ${baseFrom} ${whereClause}`,
+        const [[{ total }]] = await db.query(
+            `SELECT COUNT(*) AS total
+             FROM movimientos m
+             JOIN users u ON m.id_usuario = u.id
+             JOIN servicios s ON m.id_servicio = s.id
+             JOIN cajas c ON m.numero_caja = c.numero_caja
+             ${whereClause}`,
             params
         );
-        const total = countResult[0].total;
 
-        // Data query
-        const dataParams = [...params, pageSize, offset];
+        // Consulta paginada
         const [results] = await db.query(
-            `
-            SELECT 
-                m.*, 
+            `SELECT 
+                m.*,
                 u.username AS nombre_usuario,
                 s.nombre AS nombre_servicio,
                 c.nombre AS nombre_caja
-            ${baseFrom}
-            ${whereClause}
-            ORDER BY m.fecha DESC, m.hora DESC
-            LIMIT ? OFFSET ?
-            `,
-            dataParams
+             FROM movimientos m
+             JOIN users u ON m.id_usuario = u.id
+             JOIN servicios s ON m.id_servicio = s.id
+             JOIN cajas c ON m.numero_caja = c.numero_caja
+             ${whereClause}
+             ORDER BY m.fecha DESC, m.hora DESC
+             LIMIT ? OFFSET ?`,
+            [...params, pageSize, offset]
         );
 
-        res.json({ total, page, pageSize, data: results });
+        res.json({
+            total,
+            page,
+            pageSize,
+            data: results
+        });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: err.message });
     }
 };
+
+
 
 
 exports.getMovimientoById = async (req, res) => {
