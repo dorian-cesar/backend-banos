@@ -12,8 +12,7 @@ Este proyecto corresponde a un backend desarrollado con Node.js, Express y MySQL
 > **Características técnicas**:  
 > - Autenticación JWT  
 > - Paginación y búsqueda avanzada  
-> - Validaciones de integridad referencial  
-> - Despliegue HTTPS seguro  
+> - Validaciones de integridad referencial 
 
 ---
 
@@ -32,7 +31,7 @@ DB_NAME=basedatos
 ---
 
 ## Base URL
-```http
+```
 http://localhost:4000/api
 ```
 
@@ -41,7 +40,7 @@ http://localhost:4000/api
 ## Autenticación
 Incluir el token en headers para rutas protegidas:
 ```http
-  Authorization: Bearer <token_jwt>
+Authorization: Bearer <token_jwt>
 ```
 Respuestas de error:
 | Código | Descripción |
@@ -95,7 +94,7 @@ Respuesta:
 | PUT    | `/users/:id` | Actualizar usuario existente | Sí |
 | DELETE | `/users/:id` | Eliminar usuario             | Sí |
 
-1. Ejemplo obtener todos los usuarios: 
+1. Ejemplo obtener usuarios: 
     ```http
     GET /api/users?page=1&pageSize=10&search=admin
     ```
@@ -181,7 +180,7 @@ Respuesta:
     }
     ```
     Notas:
-    - password es opcional.
+    - `password` es opcional.
     - Si no se envía, la contraseña no se modifica.
 
     Respuesta:
@@ -214,7 +213,7 @@ Respuesta:
 | PUT    | `/services/:id` | Actualizar servicio existente | Sí |
 | DELETE | `/services/:id` | Eliminar servicio             | Sí |
 
-1. Ejemplo listar todos los servicios:
+1. Ejemplo listar servicios:
     ```http
     GET /api/services?page=1&pageSize=10&search=baño
     ```
@@ -331,7 +330,7 @@ Respuesta:
 | PUT    | `/movimientos/:id` | Actualizar movimiento existente | Sí |
 | DELETE | `/movimientos/:id` | Eliminar movimiento             | Sí |
 
-1. Ejemplo listar todos los movimientos:
+1. Ejemplo listar movimientos:
     ```http
     GET /api/movimientos?page=1&pageSize=10&search=efectivo&id_usuario=2&numero_caja=1&fecha_inicio=2025-07-01&fecha_fin=2025-07-31
     ```
