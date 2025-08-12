@@ -31,12 +31,10 @@ const sslOptions = {
   cert: fs.readFileSync(path.join(__dirname, 'cert', 'cert.pem')),
 };
 
-// Iniciar servidor HTTPS
-
-https.createServer(sslOptions, app).listen(PORT, () => {
-  console.log(`Servidor HTTPS escuchando en https://localhost:${PORT}`);
-});
-
-// http.createServer(app).listen(PORT, () => {
-//   console.log(`Servidor HTTP escuchando en http://localhost:${PORT}`);
+// https.createServer(sslOptions, app).listen(PORT, () => {
+//   console.log(`Servidor HTTPS escuchando en https://localhost:${PORT}`);
 // });
+
+http.createServer(app).listen(PORT, () => {
+  console.log(`Servidor HTTP escuchando en http://localhost:${PORT}`);
+});
