@@ -50,14 +50,14 @@ exports.getAllMovimientos = async (req, res) => {
         // Filtro de búsqueda global con LIKE para varios campos
         if (search) {
             filtros.push(`(
-                (LOWER(u.username) LIKE ? OR 
-                 LOWER(s.nombre) LIKE ? OR 
-                 LOWER(c.nombre) LIKE ? OR 
-                 LOWER(m.medio_pago) LIKE ? OR
-                 CAST(m.numero_caja AS CHAR) LIKE ? OR
-                 LOWER(m.codigo) LIKE ?)
-            `);
-            params.push(search, search, search, search);
+                LOWER(u.username) LIKE ? OR 
+                LOWER(s.nombre) LIKE ? OR 
+                LOWER(c.nombre) LIKE ? OR 
+                LOWER(m.medio_pago) LIKE ? OR
+                CAST(m.numero_caja AS CHAR) LIKE ? OR
+                LOWER(m.codigo) LIKE ?
+            )`);
+            params.push(search, search, search, search, search, search);
         }
 
         // Construir cláusula WHERE

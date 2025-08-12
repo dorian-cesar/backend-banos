@@ -23,7 +23,8 @@ exports.getAllUsers = async (req, res) => {
         );
 
         const [results] = await db.query(
-            `SELECT * FROM users
+            `SELECT id, username, email, role
+             FROM users
              WHERE username LIKE ? OR email LIKE ? OR role LIKE ?
              ORDER BY id DESC
              LIMIT ? OFFSET ?`,
@@ -79,9 +80,9 @@ exports.createUser = async (req, res) => {
         return res.status(400).json({ error: 'Email inválido' });
     }
 
-    // if (password.length < 6) {
-    //     return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
-    // }
+    if (password.length < 6) {
+        return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+    }
 
     const [existing] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length > 0) {
@@ -114,9 +115,9 @@ exports.updateUser = async (req, res) => {
         return res.status(400).json({ error: 'Email inválido' });
     }
 
-    // if (password && password.length < 6) {
-    //     return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres si se proporciona' });
-    // }
+    if (password && password.length < 6) {
+        return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres si se proporciona' });
+    }
 
     try {
         // Verificar si el email cambió y si está en uso por otro

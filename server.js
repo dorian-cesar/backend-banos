@@ -26,14 +26,16 @@ app.use(express.json());
 
 app.use('/api', routes);
 
+/*
 const sslOptions = {
   key: fs.readFileSync(path.join(__dirname, 'cert', 'key.pem')),
   cert: fs.readFileSync(path.join(__dirname, 'cert', 'cert.pem')),
 };
 
-// https.createServer(sslOptions, app).listen(PORT, () => {
-//   console.log(`Servidor HTTPS escuchando en https://localhost:${PORT}`);
-// });
+https.createServer(sslOptions, app).listen(PORT, () => {
+  console.log(`Servidor HTTPS escuchando en https://localhost:${PORT}`);
+});
+*/
 
 http.createServer(app).listen(PORT, () => {
   console.log(`Servidor HTTP escuchando en http://localhost:${PORT}`);
