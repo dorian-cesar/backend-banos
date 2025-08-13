@@ -82,6 +82,16 @@ Respuesta:
     }
 }
 ```
+Respuestas de error: 
+
+| Código | Respuesta                                                                    | Descripción                                                |
+| ------ | ---------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| 400    | `{ "error": "Email y contraseña son requeridos" }`                           | No se enviaron ambos campos en el body de la solicitud.    |
+| 401    | `{ "error": "Credenciales inválidas" }`                                      | Email no encontrado o contraseña incorrecta.               |
+| 403    | `{ "error": "Acceso denegado: solo administradores pueden iniciar sesión" }` | Usuario existe pero no tiene rol `admin`.                  |
+| 500    | `{ "error": "Error interno del servidor" }`                                  | Cualquier error inesperado en el backend durante el login. |
+
+
 ---
 
 ### 2. Usuarios (`/users`)
@@ -201,6 +211,23 @@ Respuesta:
     }
     ```
 
+Respuestas de error: 
+
+| Código | Respuesta                                                                         | Descripción                                                                           |
+| ------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 400    | `{ "error": "Todos los campos son requeridos" }`                                  | No se enviaron todos los campos obligatorios al crear un usuario.                     |
+| 400    | `{ "error": "username, email y role son requeridos" }`                            | No se enviaron los campos obligatorios al actualizar un usuario.                      |
+| 400    | `{ "error": "Email inválido" }`                                                   | Email no cumple formato válido.                                                       |
+| 400    | `{ "error": "La contraseña debe tener al menos 6 caracteres" }`                   | Contraseña demasiado corta al crear usuario.                                          |
+| 400    | `{ "error": "La contraseña debe tener al menos 6 caracteres si se proporciona" }` | Contraseña demasiado corta al actualizar usuario (si se proporciona).                 |
+| 404    | `{ "error": "Usuario no encontrado" }`                                            | Usuario no existe en la base de datos (al obtener o actualizar).                      |
+| 409    | `{ "error": "El email ya está en uso" }`                                          | Email ya registrado al crear un usuario.                                              |
+| 409    | `{ "error": "El email ya está en uso por otro usuario" }`                         | Email ya registrado por otro usuario al actualizar.                                   |
+| 500    | `{ "error": "Error interno del servidor" }`                                       | Cualquier error inesperado en el backend al obtener, crear o actualizar usuarios.     |
+| 500    | `{ "error": <mensaje de error de MySQL> }`                                        | Error inesperado al eliminar usuario (puede devolver directamente el error de MySQL). |
+| 404    | `{ "message": "Usuario no encontrado" }`                                          | Intento de eliminar un usuario que no existe.                                         |
+
+
 ---
 
 ### 3. Servicios (`/services`)
@@ -318,6 +345,13 @@ Respuesta:
         "message": "Servicio eliminado correctamente"
     }
     ```
+Respuestas de error: 
+| Código | Respuesta                                             | Descripción                                                  |
+| ------ | ----------------------------------------------------- | ------------------------------------------------------------ |
+| 400    | `{ "error": "nombre, tipo y precio son requeridos" }` | Faltan campos obligatorios al crear un servicio.             |
+| 404    | `{ "message": "Servicio no encontrado" }`             | Servicio no existe al obtener, actualizar o eliminar por ID. |
+| 500    | `{ "error": <mensaje de error de MySQL> }`            | Error interno del servidor o en la base de datos.            |
+
 
 ---
 
@@ -454,6 +488,18 @@ Respuesta:
       "message": "Movimiento eliminado correctamente"
     }
     ```
+Respuestas de error:
+| Código | Respuesta                                                            | Descripción                                                                        |
+| ------ | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 400    | `{ "error": "Todos los campos obligatorios deben estar presentes" }` | Falta algún campo requerido al crear o actualizar un movimiento.                   |
+| 400    | `{ "error": "Monto debe ser un número positivo" }`                   | El monto no es válido (no numérico o ≤ 0).                                         |
+| 400    | `{ "error": "id_aperturas_cierres no existe" }`                      | La clave foránea `id_aperturas_cierres` no existe en la tabla `aperturas_cierres`. |
+| 400    | `{ "error": "id_usuario no existe" }`                                | La clave foránea `id_usuario` no existe en la tabla `users`.                       |
+| 400    | `{ "error": "id_servicio no existe" }`                               | La clave foránea `id_servicio` no existe en la tabla `servicios`.                  |
+| 400    | `{ "error": "numero_caja no existe" }`                               | La clave foránea `numero_caja` no existe en la tabla `cajas`.                      |
+| 404    | `{ "message": "Movimiento no encontrado" }`                          | No se encontró el movimiento al obtener, actualizar o eliminar por ID.             |
+| 500    | `{ "error": <mensaje de error de MySQL> }`                           | Error interno del servidor o en la base de datos.                                  |
+
 
 ---
 
@@ -568,6 +614,16 @@ Respuesta:
       "message": "Caja eliminada correctamente"
     }
     ```
+Respuestas de error:
+
+| Código | Respuesta                                              | Descripción                                                      |
+| ------ | ------------------------------------------------------ | ---------------------------------------------------------------- |
+| 400    | `{ "error": "numero_caja y nombre son obligatorios" }` | Faltan campos obligatorios al crear una caja.                    |
+| 404    | `{ "message": "Caja no encontrada" }`                  | No se encontró la caja al obtener, actualizar o eliminar por ID. |
+| 409    | `{ "error": "El número de caja ya existe" }`           | Intento de crear o actualizar con un `numero_caja` duplicado.    |
+| 500    | `{ "error": <mensaje de error de MySQL> }`             | Error interno del servidor o en la base de datos.                |
+
+
 ---
 
 ### 6. Aperturas y Cierres (`/aperturas-cierres`)
@@ -712,6 +768,16 @@ Respuesta:
       "message": "Registro eliminado correctamente"
     }
     ```
+Respuestas de error:
+
+| Código | Respuesta                                                                                                            | Descripción                                                          |
+| ------ | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 400    | `{ "error": "Campos obligatorios: numero_caja, id_usuario_apertura, fecha_apertura, hora_apertura, monto_inicial" }` | Faltan campos obligatorios al crear un registro.                     |
+| 404    | `{ "message": "Registro no encontrado" }`                                                                            | No se encontró el registro al obtener, actualizar o eliminar por ID. |
+| 500    | `{ "error": <mensaje de error de MySQL> }`                                                                           | Error interno del servidor o en la base de datos.                    |
+
+
+
 ---
 
 ### 7. Helpers (`/helpers`)
@@ -802,6 +868,11 @@ Respuesta:
         }
     }
     ```
+Respuestas de error:
+| Código | Respuesta                                             | Descripción                                                                                  |
+| ------ | ----------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 500    | `{ "error": "Error al obtener metadata" }`            | Error interno del servidor al obtener metadata (usuarios, servicios, cajas, medios de pago). |
+| 500    | `{ "error": "Error al obtener resumen de metadata" }` | Error interno del servidor al calcular totales y distribuciones de movimientos.              |
 
 ---
 
