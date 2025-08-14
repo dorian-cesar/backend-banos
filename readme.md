@@ -16,6 +16,17 @@ Este proyecto corresponde a un backend desarrollado con Node.js, Express y MySQL
 
 ---
 
+## Índice
+- [1. Autenticacion (`/auth`)](#1-autenticacion-auth)
+- [2. Usuarios (`/users`)](#2-usuarios-users)
+- [3. Servicios (`/services`)](#3-servicios-services)
+- [4. Movimientos (`/movimientos`)](#4-movimientos-movimientos)
+- [5. Cajas (`/cajas`)](#5-cajas-cajas)
+- [6. Aperturas y Cierres (`/aperturas-cierres`)](#6-aperturas-y-cierres-aperturas-cierres)
+- [7. Helpers (`/helpers`)](#7-helpers-helpers)
+
+---
+
 ## Configuración mínima
 ```bash
 # Variables de entorno requeridas (.env)
@@ -54,7 +65,7 @@ Respuestas de error:
 
 ## Endpoints
 
-### 1. Autenticación (`/auth`)
+### 1. Autenticacion (`/auth`)
 | Método | Endpoint              | Descripción                  | Requiere Token |
 | ------ | ----------------- | ---------------------------- | ----- |
 | POST   | `/auth/login` | Login con email y contraseña | No |
