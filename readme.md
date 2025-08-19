@@ -545,7 +545,8 @@ Respuestas de error:
               "nombre": "Caja Principal",
               "ubicacion": "Entrada principal",
               "estado": "activa",
-              "descripcion": null
+              "descripcion": null,
+              "estado_apertura": "cerrada"
           }
         ]
     }
