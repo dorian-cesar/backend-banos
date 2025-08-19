@@ -8,19 +8,47 @@ exports.getAllCajas = async (req, res) => {
         const offset = (page - 1) * pageSize;
         const search = req.query.search ? req.query.search.toLowerCase() : '';
 
-        let totalQuery = 'SELECT COUNT(*) AS total FROM cajas';
-        let dataQuery = 'SELECT * FROM cajas';
         let params = [];
 
+        // --- Query para contar ---
+        let totalQuery = `
+            SELECT COUNT(*) AS total
+            FROM cajas c
+        `;
+
+        // --- Query para traer datos ---
+        let dataQuery = `
+            SELECT 
+                c.id,
+                c.numero_caja,
+                c.nombre,
+                c.ubicacion,
+                c.estado AS estado_caja,
+                c.descripcion,
+                CASE 
+                    WHEN EXISTS (
+                        SELECT 1 
+                        FROM aperturas_cierres ac
+                        WHERE ac.numero_caja = c.numero_caja
+                          AND ac.estado = 'abierta'
+                    ) THEN 'abierta'
+                    ELSE 'cerrada'
+                END AS estado_apertura
+            FROM cajas c
+        `;
+
+        // --- Filtro de búsqueda ---
         if (search) {
-            totalQuery += ' WHERE LOWER(nombre) LIKE ? OR CAST(numero_caja AS CHAR) LIKE ?';
-            dataQuery += ' WHERE LOWER(nombre) LIKE ? OR CAST(numero_caja AS CHAR) LIKE ?';
+            totalQuery += ' WHERE LOWER(c.nombre) LIKE ? OR CAST(c.numero_caja AS CHAR) LIKE ?';
+            dataQuery += ' WHERE LOWER(c.nombre) LIKE ? OR CAST(c.numero_caja AS CHAR) LIKE ?';
             params.push(`%${search}%`, `%${search}%`);
         }
 
-        dataQuery += ' ORDER BY id DESC LIMIT ? OFFSET ?';
+        // --- Orden y paginación ---
+        dataQuery += ' ORDER BY c.id DESC LIMIT ? OFFSET ?';
         params.push(pageSize, offset);
 
+        // --- Ejecutar consultas ---
         const [[{ total }]] = await db.query(totalQuery, params.slice(0, search ? 2 : 0));
         const [results] = await db.query(dataQuery, params);
 
