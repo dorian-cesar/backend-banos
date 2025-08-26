@@ -11,8 +11,10 @@ const aperturasCierresRoutes = require('./aperturasCierres.routes');
 const helpersRoutes = require('./helpers.routes')
 const authRoutes = require('./auth.routes');
 
+//sin autenticacion 
 router.use('/auth', authRoutes);
 
+//autenticados
 router.use('/users', authenticateToken, usersRoutes);
 router.use('/services', authenticateToken, serviciosRoutes);
 router.use('/movimientos', authenticateToken, movimientosRoutes);
