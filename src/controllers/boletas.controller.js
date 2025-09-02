@@ -63,31 +63,54 @@ exports.emitirBoleta = async (req, res) => {
     const codigoTemporal = temporalRes.data.codigo;
 
     // 2 - Emitir definitivo
-    const definitivoRes = await axios.post(
-      `${API_URL}/dte/documentos/generar`,
-      {
-        codigo: codigoTemporal,
-        dte: 39,
-        emisor: parseInt(EMISOR_RUT),
-        receptor: 66666666,
-      },
-      {
-        headers: AUTH_HEADERS,
-        params: {
-          empresa: `${EMISOR_RUT}-${EMISOR_DV}`,
-          formato: "json",
-          getXML: 0,
-          links: 0,
-          email: 0,
-          retry: 1,
-          gzip: 0,
+    let folio;
+    try {
+      const definitivoRes = await axios.post(
+        `${API_URL}/dte/documentos/generar`,
+        {
+          codigo: codigoTemporal,
+          dte: 39,
+          emisor: parseInt(EMISOR_RUT),
+          receptor: 66666666,
         },
+        {
+          headers: AUTH_HEADERS,
+          params: {
+            empresa: `${EMISOR_RUT}-${EMISOR_DV}`,
+            formato: "json",
+            getXML: 0,
+            links: 0,
+            email: 0,
+            retry: 1,
+            gzip: 0,
+          },
+        }
+      );
+
+      // Validar que venga el folio
+      if (!definitivoRes.data?.folio) {
+        throw new Error(
+          `LibreDTE no devolvió folio válido: ${JSON.stringify(
+            definitivoRes.data
+          )}`
+        );
       }
-    );
 
-    const folio = definitivoRes.data.folio;
+      folio = definitivoRes.data.folio;
+    } catch (error) {
+      console.error(
+        "Error generando DTE definitivo:",
+        error.response?.data || error.message
+      );
+      return res
+        .status(502)
+        .json({
+          error: "No se pudo generar boleta en LibreDTE",
+          details: error.message,
+        });
+    }
 
-    // Responder inmediatamente al frontend
+    // Enviar respuesta rápida al frontend con el folio
     res.status(201).json({ message: "Boleta emitida", folio });
 
     // --- Lo siguiente ocurre en background (sin bloquear al cliente) ---
