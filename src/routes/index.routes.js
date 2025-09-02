@@ -10,9 +10,11 @@ const cajasRoutes = require('./cajas.routes');
 const aperturasCierresRoutes = require('./aperturasCierres.routes');
 const helpersRoutes = require('./helpers.routes')
 const authRoutes = require('./auth.routes');
+const boletasRoutes = require('./boletas.routes');
 
 //sin autenticacion 
 router.use('/auth', authRoutes);
+router.use('/boletas', boletasRoutes);
 
 //autenticados
 router.use('/users', authenticateToken, usersRoutes);
