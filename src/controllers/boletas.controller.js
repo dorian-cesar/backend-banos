@@ -143,68 +143,113 @@ exports.solicitarNuevosFolios = async (req, res) => {
 
 // Funciones auxiliares
 // --- Obtener siguiente folio revisando todos los CAF ---
+
 async function obtenerSiguienteFolio() {
-  // Tomar el folio real más grande, ignorando boletas ficticias
-  const [rows] = await db.query(`
-    SELECT MAX(folio) as ultimo
-    FROM boletas
-    WHERE ficticia IS NULL OR ficticia = 0
-  `);
-  const ultimoFolio = rows[0]?.ultimo || 0;
+  try {
+    // --- Obtener último folio CON CONVERSIÓN A NÚMERO ---
+    const [rows] = await db.query(`
+      SELECT MAX(folio) as ultimo
+      FROM boletas
+      WHERE ficticia IS NULL OR ficticia = 0
+    `);
 
-  const archivosCAF = fs
-    .readdirSync(CAF_DIRECTORY)
-    .filter((f) => f.endsWith(".xml"))
-    .sort();
+    // Conversión explícita a número
+    const ultimoFolio = Number(rows[0]?.ultimo) || 0;
+    const siguienteFolio = ultimoFolio + 1;
 
-  if (!archivosCAF.length) {
-    return { folioAsignado: null, CAF_PATH: null };
-  }
+    console.log("Debug folios:");
+    console.log(
+      " - Último folio en BD:",
+      rows[0]?.ultimo,
+      "(tipo:",
+      typeof rows[0]?.ultimo + ")"
+    );
+    console.log(" - Convertido a número:", ultimoFolio);
+    console.log(" - Siguiente folio:", siguienteFolio);
 
-  let siguiente = null;
-  let cafSeleccionado = null;
-  let CAF_PATH_local = null;
-  let totalFoliosRestantes = 0;
+    // --- Leer CAF disponibles ---
+    const archivosCAF = fs
+      .readdirSync(CAF_DIRECTORY)
+      .filter((f) => f.endsWith(".xml"));
 
-  for (const archivo of archivosCAF) {
-    const rutaArchivo = path.join(CAF_DIRECTORY, archivo);
-    const cafXml = fs.readFileSync(rutaArchivo, "utf-8");
-    const rngMatch = cafXml.match(/<RNG><D>(\d+)<\/D><H>(\d+)<\/H><\/RNG>/);
-    if (!rngMatch) continue;
-
-    const desde = parseInt(rngMatch[1], 10);
-    const hasta = parseInt(rngMatch[2], 10);
-
-    totalFoliosRestantes += hasta - desde + 1;
-
-    // 1️⃣ Si siguiente folio cae dentro del CAF
-    if (ultimoFolio + 1 >= desde && ultimoFolio + 1 <= hasta) {
-      siguiente = ultimoFolio + 1;
-      cafSeleccionado = archivo;
-      CAF_PATH_local = rutaArchivo;
-      break;
+    if (!archivosCAF.length) {
+      console.log("No hay CAF en la carpeta.");
+      return { folioAsignado: null, CAF_PATH: null, totalFoliosRestantes: 0 };
     }
 
-    // 2️⃣ Si último folio es menor que inicio del CAF
-    if (ultimoFolio < desde && !siguiente) {
-      siguiente = desde;
-      cafSeleccionado = archivo;
-      CAF_PATH_local = rutaArchivo;
-      break;
+    // --- Mapear CAF con rangos ---
+    const cafs = archivosCAF
+      .map((archivo) => {
+        const ruta = path.join(CAF_DIRECTORY, archivo);
+        const cafXml = fs.readFileSync(ruta, "utf-8");
+        const rngMatch = cafXml.match(
+          /<RNG>\s*<D>(\d+)<\/D>\s*<H>(\d+)<\/H>\s*<\/RNG>/
+        );
+
+        if (!rngMatch) return null;
+
+        return {
+          archivo,
+          ruta,
+          desde: parseInt(rngMatch[1].trim(), 10),
+          hasta: parseInt(rngMatch[2].trim(), 10),
+          total:
+            parseInt(rngMatch[2].trim(), 10) -
+            parseInt(rngMatch[1].trim(), 10) +
+            1,
+        };
+      })
+      .filter(Boolean);
+
+    // --- Ordenar CAF por folio inicial ---
+    cafs.sort((a, b) => a.desde - b.desde);
+
+    let CAF_PATH_local = null;
+    let cafSeleccionado = null;
+    let totalFoliosRestantes = 0;
+
+    // --- Buscar CAF apropiado ---
+    for (const caf of cafs) {
+      totalFoliosRestantes += caf.total;
+
+      if (siguienteFolio >= caf.desde && siguienteFolio <= caf.hasta) {
+        CAF_PATH_local = caf.ruta;
+        cafSeleccionado = caf.archivo;
+        break;
+      }
     }
-  }
 
-  // 3️⃣ Si no se encuentra folio real disponible
-  if (!siguiente) {
-    console.log("No hay folios disponibles en los CAF.");
-    return { folioAsignado: null, CAF_PATH: null, totalFoliosRestantes };
-  }
+    if (!CAF_PATH_local) {
+      console.log("No hay folios disponibles en los CAF.");
+      console.log("Siguiente folio necesario:", siguienteFolio);
+      console.log(
+        "CAFs disponibles:",
+        cafs.map((c) => `${c.archivo}: ${c.desde}-${c.hasta}`)
+      );
+      return { folioAsignado: null, CAF_PATH: null, totalFoliosRestantes };
+    }
 
-  return {
-    folioAsignado: siguiente,
-    CAF_PATH: CAF_PATH_local,
-    totalFoliosRestantes,
-  };
+    // --- Retornar resultado ---
+    console.log(
+      `CAF seleccionado: ${cafSeleccionado} | Folio: ${siguienteFolio}`
+    );
+    CAF_PATH = CAF_PATH_local;
+    return {
+      folioAsignado: siguienteFolio,
+      CAF_PATH: CAF_PATH_local,
+      cafSeleccionado,
+      totalFoliosRestantes,
+    };
+    // para pruebas
+    // return {
+    //   CAF_PATH: CAF_PATH_local,
+    //   cafSeleccionado,
+    //   totalFoliosRestantes,
+    // };
+  } catch (error) {
+    console.error("Error en obtenerSiguienteFolio:", error);
+    return { folioAsignado: null, CAF_PATH: null, totalFoliosRestantes: 0 };
+  }
 }
 
 // --- Extraer datos de resolución desde CAF ---
@@ -230,10 +275,12 @@ exports.emitirBoleta = async (req, res) => {
   try {
     const { folioAsignado, CAF_PATH, totalFoliosRestantes } =
       await obtenerSiguienteFolio();
-    return res.status(200).json({
-      folio: folioAsignado,
-      caf: CAF_PATH,
-    });
+      console.log("CAF_PATH:", CAF_PATH);
+      console.log("folioAsignado en flujo:", folioAsignado);
+    // return res.status(200).json({
+    //   folio: folioAsignado,
+    //   caf: CAF_PATH,
+    // });
 
     // --- CASO: No hay folio disponible → boleta ficticia ---
     if (!folioAsignado) {
