@@ -82,7 +82,7 @@ exports.solicitarNuevosFolios = async (req, res) => {
 
     if (cantidad < ALERTA_MIN_FOLIOS)
       return res.status(400).json({
-        error: `La cantidad de folios solicitados es menor a ${ALERTA_MIN_FOLIOS}.`,
+        error: `La cantidad de folios solicitados es menor a ${ALERTA_MIN_FOLIOS}. Sugerencia: 500000`,
       });
 
     const url = `https://servicios.simpleapi.cl/api/folios/get/39/${cantidad}`;
@@ -277,10 +277,6 @@ exports.emitirBoleta = async (req, res) => {
       await obtenerSiguienteFolio();
       console.log("CAF_PATH:", CAF_PATH);
       console.log("folioAsignado en flujo:", folioAsignado);
-    // return res.status(200).json({
-    //   folio: folioAsignado,
-    //   caf: CAF_PATH,
-    // });
 
     // --- CASO: No hay folio disponible → boleta ficticia ---
     if (!folioAsignado) {
