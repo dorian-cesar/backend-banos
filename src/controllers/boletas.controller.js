@@ -148,7 +148,9 @@ async function obtenerSiguienteFolio() {
     const [rows] = await db.query(`
       SELECT MAX(folio) as ultimo
       FROM boletas
-      WHERE ficticia IS NULL OR ficticia = 0
+      WHERE (ficticia IS NULL OR ficticia = 0)
+        AND (estado_sii IS NULL OR estado_sii != 'RSC')
+        AND folio NOT LIKE '%-R'
     `);
 
     // Conversión explícita a número
@@ -401,14 +403,23 @@ exports.emitirBoleta = async (req, res) => {
     const estadosValidos = ["ACE", "EPR", "REC", "SOK", "DOK"];
     const xmlBase64 = Buffer.from(dteXml, "utf-8").toString("base64");
 
+    // --- Ajustar folio si estado es RSC ---
+    let folioParaGuardar = folioAsignado;
+    if (estado === "RSC") {
+      folioParaGuardar = `${folioAsignado}-R`;
+    }
+
     try {
       // Guardar boleta en DB sin importar el estado
       const [result] = await db.query(
         `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia)
      VALUES (?, ?, ?, NOW(), ?, ?, ?, 0)`,
-        [folioAsignado, nombre, precio, estado, xmlBase64, trackId]
+        [folioParaGuardar, nombre, precio, estado, xmlBase64, trackId]
       );
-      console.log("Boleta guardada en base de datos con folio:", folioAsignado);
+      console.log(
+        "Boleta guardada en base de datos con folio:",
+        folioParaGuardar
+      );
     } catch (error) {
       console.error("Error guardando boleta:", error);
     }
