@@ -10,10 +10,10 @@ const API_URL = process.env.SIMPLEAPI_URL;
 const API_KEY = process.env.SIMPLEAPI_KEY;
 const EMISOR_RUT = process.env.EMISOR_RUT;
 const EMISOR_DV = process.env.EMISOR_DV;
-const CERT_PATH = "./certificado/certificado.pfx";
+const CERT_PATH = "../../certificado/certificado.pfx";
 const CERT_PASS = process.env.CERT_PASS;
 // const CAF_PATH = "./caf/caf.xml";
-const CAF_DIRECTORY = "./caf/";
+const CAF_DIRECTORY = "../../caf/";
 const ALERTA_MIN_FOLIOS = 1500;
 let CAF_PATH;
 
@@ -404,11 +404,16 @@ exports.emitirBoleta = async (req, res) => {
     }
 
     // Guardar boleta real en DB
-    await db.query(
-      `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia)
-       VALUES (?, ?, ?, NOW(), ?, ?, ?, 0)`,
-      [folioAsignado, nombre, precio, estado, xmlBase64, trackId]
-    );
+    try {
+      const [result] = await db.query(
+        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia)
+     VALUES (?, ?, ?, NOW(), ?, ?, ?, 0)`,
+        [folioAsignado, nombre, precio, estado, xmlBase64, trackId]
+      );
+      console.log("Boleta guardada en base de datos con folio:", folioAsignado);
+    } catch (error) {
+      console.error("Error guardando boleta:", error);
+    }
 
     res.status(201).json({
       message: "Boleta generada correctamente",
