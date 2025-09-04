@@ -12,7 +12,6 @@ const EMISOR_RUT = process.env.EMISOR_RUT;
 const EMISOR_DV = process.env.EMISOR_DV;
 const CERT_PATH = __dirname + "/../../certificado/certificado.pfx";
 const CERT_PASS = process.env.CERT_PASS;
-// const CAF_PATH = "./caf/caf.xml";
 const CAF_DIRECTORY = __dirname + "/../../caf/";
 const ALERTA_MIN_FOLIOS = 1500;
 let CAF_PATH;
@@ -302,6 +301,10 @@ exports.emitirBoleta = async (req, res) => {
     const producto = { nombre, precio };
     const payload = crearPayload(producto, folioAsignado);
     console.log("Folio Asignado:", folioAsignado);
+    console.log("__dirname:", __dirname);
+    console.log("CAF_PATH absoluto:", CAF_PATH);
+    console.log("Tamaño CERT_PATH:", fs.statSync(CERT_PATH).size);
+    console.log("Tamaño CAF_PATH:", fs.statSync(CAF_PATH).size);
 
     // Generar DTE
     const formGen = new FormData();
