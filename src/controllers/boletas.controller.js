@@ -66,32 +66,6 @@ function crearPayload(producto, folio) {
   };
 }
 
-async function enviarAlertaCorreo(totalFoliosRestantes) {
-  try {
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    const info = await transporter.sendMail({
-      from: `"Sistema Boletas" <${process.env.SMTP_USER}>`,
-      // to: "dwigodski@wit.la, sandoval.jesus2005@gmail.com",
-      to: "dwigodski@wit.la",
-      subject: "🚨 Alerta: folios disponibles bajos!",
-      text: `Quedan solo ${totalFoliosRestantes} folios disponibles en el sistema de boletas de Baño y Duchas en el Terminal.\n
-        Por favor solicita nuevos folios lo antes posible.\n
-        Solicita la obtención de nuevos folios con sus credenciales aquí: https://mantenedor-banios.netlify.app/dashboard/folios\n`,
-    });
-
-    console.log("Correo de alerta de folios enviado:", info.messageId);
-  } catch (err) {
-    console.error("Error al enviar correo de alerta:", err);
-  }
-}
-
 // --- Endpoint para solicitar nuevos folios ---
 exports.solicitarNuevosFolios = async (req, res) => {
   try {
@@ -168,6 +142,33 @@ exports.solicitarNuevosFolios = async (req, res) => {
 };
 
 // Funciones auxiliares
+// Envío de email
+async function enviarAlertaCorreo(totalFoliosRestantes) {
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    const info = await transporter.sendMail({
+      from: `"Sistema Boletas" <${process.env.SMTP_USER}>`,
+      // to: "dwigodski@wit.la, sandoval.jesus2005@gmail.com",
+      to: "dwigodski@wit.la",
+      subject: "🚨 Alerta: folios disponibles bajos!",
+      text: `Quedan solo ${totalFoliosRestantes} folios disponibles en el sistema de boletas de Baño y Duchas en el Terminal.\n
+        Por favor solicita nuevos folios lo antes posible.\n
+        Solicita la obtención de nuevos folios con sus credenciales aquí: https://mantenedor-banios.netlify.app/dashboard/folios\n`,
+    });
+
+    console.log("Correo de alerta de folios enviado:", info.messageId);
+  } catch (err) {
+    console.error("Error al enviar correo de alerta:", err);
+  }
+}
+
 // --- Obtener siguiente folio revisando todos los CAF ---
 async function obtenerSiguienteFolio() {
   try {
@@ -295,7 +296,28 @@ function obtenerDatosResolucion() {
   };
 }
 
-// --- Endpoint emitirBoleta ---
+function obtenerFechaHoraChile() {
+  const opciones = {
+    timeZone: "America/Santiago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  };
+  const fechaChile = new Intl.DateTimeFormat("es-CL", opciones).format(
+    new Date()
+  );
+  const [fecha, hora] = fechaChile.split(", ");
+  const [dia, mes, anio] = fecha.split("-");
+  return `${anio}-${mes}-${dia} ${hora}`;
+}
+
+const fechaChile = obtenerFechaHoraChile();
+
+// --- Endpoint emitirBoleta con flujo principal ---
 exports.emitirBoleta = async (req, res) => {
   const { nombre, precio } = req.body;
   if (!nombre || !precio)
@@ -314,8 +336,8 @@ exports.emitirBoleta = async (req, res) => {
 
       await db.query(
         `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
-         VALUES (NULL, ?, ?, NOW(), ?, ?, ?, 1, FALSE)`,
-        [nombre, precio, "FICTICIA", null, null, null]
+         VALUES (NULL, ?, ?, ?, ?, ?, ?, 1, FALSE)`,
+        [nombre, precio, fechaChile, "FICTICIA", null, null, null]
       );
 
       return res.status(200).json({
@@ -470,11 +492,12 @@ exports.emitirBoleta = async (req, res) => {
     // --- Guardar boleta en DB con alerta definida ---
     await db.query(
       `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
-      VALUES (?, ?, ?, NOW(), ?, ?, ?, 0, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
       [
         folioParaGuardar,
         nombre,
         precio,
+        fechaChile,
         estado,
         xmlBase64,
         trackId,

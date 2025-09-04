@@ -3,56 +3,70 @@ const FormData = require("form-data");
 const fs = require("fs");
 require("dotenv").config();
 
-// Configuración SimpleAPI
-const API_URL = process.env.SIMPLEAPI_URL;
+// Configuración desde variables de entorno
+const API_USERNAME = process.env.SIMPLEAPI_USERNAME;
+const API_PASSWORD = process.env.SIMPLEAPI_PASSWORD;
 const EMISOR_RUT = process.env.EMISOR_RUT;
 const EMISOR_DV = process.env.EMISOR_DV;
-const CERT_PATH = "./certificado/certificado.pfx";
+const CERT_PATH = __dirname + "./certificado/certificado.pfx";
 const CERT_PASS = process.env.CERT_PASS;
 
-// Usuario y contraseña de Basic Auth
-const BASIC_USER = "Diego Wigodski"
-const BASIC_PASS = "witla222"
-
-// --- Consultar folios disponibles ---
-async function consultarFolios() {
+async function consultarFoliosBoleta() {
   try {
-    const url = `https://servicios.simpleapi.cl/api/folios/get/39/`;
-
+    // Preparar datos
     const data = new FormData();
-    data.append(
-      "input",
-      JSON.stringify({
-        RutCertificado: process.env.CERT_RUT,
-        Password: CERT_PASS,
-        RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
-        Ambiente: 1,
-      })
-    );
+    const rutEmpresa = `${EMISOR_RUT}${EMISOR_DV}`.replace(/[\.\-]/g, "");
 
+    const inputJson = {
+      RutCertificado: rutEmpresa,
+      Password: CERT_PASS,
+      RutEmpresa: rutEmpresa,
+      Ambiente: 1, // 0 para certificación
+    };
+
+    data.append("input", JSON.stringify(inputJson));
     data.append("files", fs.createReadStream(CERT_PATH));
 
-    const authHeader =
-      "Basic " + Buffer.from(`${BASIC_USER}:${BASIC_PASS}`).toString("base64");
-
-    const response = await axios.post(url, data, {
-      maxBodyLength: Infinity,
+    // Configurar request
+    const config = {
+      method: "post",
+      url: "https://servicios.simpleapi.cl/api/folios/get/39/",
       headers: {
         ...data.getHeaders(),
-        Authorization: authHeader,
+        Authorization: `Basic ${Buffer.from(
+          `${API_USERNAME}:${API_PASSWORD}`
+        ).toString("base64")}`,
       },
-      timeout: 120000, // esperar hasta 2 minutos
-    });
+      data: data,
+      timeout: 90000,
+    };
 
-    console.log("Folios disponibles:", response.data);
-    return response.data;
+    // Ejecutar consulta
+    console.log("Consultando folios disponibles para boletas electrónicas...");
+    const response = await axios(config);
+    const folios = parseInt(response.data);
+
+    console.log(`Folios disponibles: ${folios}`);
+    return folios;
   } catch (error) {
-    console.error(
-      "Error consultando folios:",
-      error.response?.data || error.message
-    );
+    console.error("Error al consultar folios:");
+
+    if (error.response) {
+      console.error(`Código: ${error.response.status}`);
+      console.error(`Respuesta: ${JSON.stringify(error.response.data)}`);
+    } else if (error.code === "ENOENT") {
+      console.error("No se encuentra el archivo del certificado");
+    } else {
+      console.error(error.message);
+    }
+
     throw error;
   }
 }
 
-consultarFolios();
+// Ejecutar directamente si se llama desde la línea de comandos
+if (require.main === module) {
+  consultarFoliosBoleta().catch(() => process.exit(1));
+}
+
+module.exports = consultarFoliosBoleta;
