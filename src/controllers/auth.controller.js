@@ -7,6 +7,8 @@ const getAppUrlFromReq = require('../helpers/selectURL');
 const SECRET_KEY = process.env.JWT_SECRET;
 const RESET_SECRET = process.env.RESET_SECRET;
 
+const ALLOWED_ROLES = new Set(['admin', 'supervisor', 'recaudador', 'tesorero']);
+
 exports.loginAdmin = async (req, res) => {
     const { email, password } = req.body;
 
@@ -28,8 +30,10 @@ exports.loginAdmin = async (req, res) => {
             return res.status(401).json({ error: 'Credenciales inválidas' });
         }
 
-        if (!['admin'].includes(user.role.toLowerCase())) {
-            return res.status(403).json({ error: 'Acceso denegado: solo administradores pueden iniciar sesión' });
+        const role = String(user.role || '').toLowerCase().trim();
+
+        if (!ALLOWED_ROLES.has(role)) {
+            return res.status(403).json({ error: 'Acceso denegado' });
         }
 
         const token = jwt.sign(
@@ -102,11 +106,11 @@ exports.forgot = async (req, res) => {
     const GENERIC_MSG = 'Si el correo existe, te enviaremos instrucciones.';
 
     try {
-        if (!email) return res.json({ ok: true, message: GENERIC_MSG });
+        if (!email) return res.json({ ok: false, message: "Ingrese un correo válido" });
 
         const normalized = String(email).toLowerCase().trim();
         const [rows] = await db.query('SELECT id, email, password FROM users WHERE email = ?', [normalized]);
-        if (rows.length === 0) return res.json({ ok: true, message: GENERIC_MSG });
+        if (rows.length === 0) return res.json({ ok: true, message: "El correo no existe" });
 
         const user = rows[0];
 

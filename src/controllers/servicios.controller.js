@@ -9,7 +9,7 @@ exports.getAllServicios = async (req, res) => {
         const offset = (page - 1) * pageSize;
 
         let totalQuery = 'SELECT COUNT(*) AS total FROM servicios';
-        let dataQuery = 'SELECT * FROM servicios';
+        let dataQuery = 'SELECT * FROM servicios WHERE estado = "activo"';
 
         let countParams = [];
         let dataParams = [];
