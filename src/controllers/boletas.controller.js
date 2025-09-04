@@ -3,6 +3,7 @@ const FormData = require("form-data");
 const fs = require("fs");
 const db = require("../config/db.config");
 const path = require("path");
+const nodemailer = require("nodemailer");
 require("dotenv").config();
 
 // Configuración SimpleAPI
@@ -63,6 +64,32 @@ function crearPayload(producto, folio) {
       Password: CERT_PASS,
     },
   };
+}
+
+async function enviarAlertaCorreo(totalFoliosRestantes) {
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    const info = await transporter.sendMail({
+      from: `"Sistema Boletas" <${process.env.SMTP_USER}>`,
+      // to: "dwigodski@wit.la, sandoval.jesus2005@gmail.com",
+      to: "dwigodski@wit.la",
+      subject: "🚨 Alerta: folios disponibles bajos!",
+      text: `Quedan solo ${totalFoliosRestantes} folios disponibles en el sistema de boletas de Baño y Duchas en el Terminal.\n
+        Por favor solicita nuevos folios lo antes posible.\n
+        Solicita la obtención de nuevos folios con sus credenciales aquí: https://mantenedor-banios.netlify.app/dashboard/folios\n`,
+    });
+
+    console.log("Correo de alerta de folios enviado:", info.messageId);
+  } catch (err) {
+    console.error("Error al enviar correo de alerta:", err);
+  }
 }
 
 // --- Endpoint para solicitar nuevos folios ---
@@ -150,7 +177,7 @@ async function obtenerSiguienteFolio() {
       FROM boletas
       WHERE (ficticia IS NULL OR ficticia = 0)
         AND (estado_sii IS NULL OR estado_sii != 'RSC')
-        AND folio NOT LIKE '%-R'
+        AND folio NOT REGEXP '-[0-9]+$'
     `);
 
     // Conversión explícita a número
@@ -207,14 +234,16 @@ async function obtenerSiguienteFolio() {
     let cafSeleccionado = null;
     let totalFoliosRestantes = 0;
 
-    // --- Buscar CAF apropiado ---
+    // --- Buscar CAF apropiado y sumar folios restantes ---
     for (const caf of cafs) {
-      totalFoliosRestantes += caf.total;
+      if (caf.hasta > ultimoFolio) {
+        const desdeValido = Math.max(caf.desde, ultimoFolio + 1);
+        totalFoliosRestantes += caf.hasta - desdeValido + 1;
+      }
 
       if (siguienteFolio >= caf.desde && siguienteFolio <= caf.hasta) {
         CAF_PATH_local = caf.ruta;
         cafSeleccionado = caf.archivo;
-        break;
       }
     }
 
@@ -230,7 +259,7 @@ async function obtenerSiguienteFolio() {
 
     // --- Retornar resultado ---
     console.log(
-      `CAF seleccionado: ${cafSeleccionado} | Folio: ${siguienteFolio}`
+      `CAF seleccionado: ${cafSeleccionado} | Folio: ${siguienteFolio} | Folios Restantes: ${totalFoliosRestantes}`
     );
     CAF_PATH = CAF_PATH_local;
     return {
@@ -284,8 +313,8 @@ exports.emitirBoleta = async (req, res) => {
       console.log("No hay folios disponibles. Boleta ficticia:", folioFicticio);
 
       await db.query(
-        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia)
-         VALUES (NULL, ?, ?, NOW(), ?, ?, ?, 1)`,
+        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
+         VALUES (NULL, ?, ?, NOW(), ?, ?, ?, 1, FALSE)`,
         [nombre, precio, "FICTICIA", null, null, null]
       );
 
@@ -311,14 +340,12 @@ exports.emitirBoleta = async (req, res) => {
     formGen.append("files", fs.createReadStream(CERT_PATH));
     formGen.append("files2", fs.createReadStream(CAF_PATH));
     formGen.append("input", JSON.stringify(payload));
-
     console.log(JSON.stringify(payload, null, 2));
     console.log("Headers formGen:", formGen.getHeaders());
 
     const responseGen = await axios.post(`${API_URL}/dte/generar`, formGen, {
       headers: { Authorization: API_KEY, ...formGen.getHeaders() },
     });
-
     const dteXml = responseGen.data;
 
     // Generar Sobre de Envío
@@ -349,7 +376,6 @@ exports.emitirBoleta = async (req, res) => {
         maxBodyLength: Infinity,
       }
     );
-
     const sobreXml = responseSobre.data;
 
     // Enviar al SII
@@ -406,25 +432,63 @@ exports.emitirBoleta = async (req, res) => {
     // --- Ajustar folio si estado es RSC ---
     let folioParaGuardar = folioAsignado;
     if (estado === "RSC") {
-      folioParaGuardar = `${folioAsignado}-R`;
+      // Genera un número aleatorio de 6 dígitos para anexar al folio
+      const randomSuffix = Math.floor(Math.random() * 900000) + 100000;
+      folioParaGuardar = `${folioAsignado}-${randomSuffix}`;
     }
 
-    try {
-      // Guardar boleta en DB sin importar el estado
-      const [result] = await db.query(
-        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia)
-     VALUES (?, ?, ?, NOW(), ?, ?, ?, 0)`,
-        [folioParaGuardar, nombre, precio, estado, xmlBase64, trackId]
-      );
+    // --- Verificar boleta anterior (antes de insertar la nueva) ---
+    const [ultimaBoleta] = await db.query(
+      `SELECT folio, alerta
+   FROM boletas
+   ORDER BY id DESC
+   LIMIT 1`
+    );
+
+    const alertaAnterior = ultimaBoleta[0]?.alerta;
+    let alertaActual = false; // valor por defecto
+
+    // --- Evaluar si mandar correo ---
+    if (totalFoliosRestantes < ALERTA_MIN_FOLIOS) {
+      if (!alertaAnterior) {
+        console.log("Enviando alerta de folios bajos...");
+        await enviarAlertaCorreo(totalFoliosRestantes);
+        alertaActual = true;
+      } else {
+        console.log(
+          "Alerta ya enviada en la boleta anterior. No se envía mail nuevamente."
+        );
+        alertaActual = true; // mantener la continuidad de la alerta
+      }
+    } else {
       console.log(
-        "Boleta guardada en base de datos con folio:",
-        folioParaGuardar
+        "Folios suficientes, alerta = false para permitir futuras alertas..."
       );
-    } catch (error) {
-      console.error("Error guardando boleta:", error);
+      alertaActual = false;
     }
 
-    // Verificar si el SII rechazó para informar al front
+    // --- Guardar boleta en DB con alerta definida ---
+    await db.query(
+      `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
+      VALUES (?, ?, ?, NOW(), ?, ?, ?, 0, ?)`,
+      [
+        folioParaGuardar,
+        nombre,
+        precio,
+        estado,
+        xmlBase64,
+        trackId,
+        alertaActual,
+      ]
+    );
+    console.log(
+      "Boleta guardada en base de datos con folio:",
+      folioParaGuardar,
+      "| alerta:",
+      alertaActual
+    );
+
+    // --- Verificar si el SII rechazó para informar al front ---
     if (!estadosValidos.includes(estado)) {
       return res.status(400).json({
         error: `El SII rechazó la boleta. Estado: ${estado || "desconocido"}`,
