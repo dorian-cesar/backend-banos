@@ -162,7 +162,6 @@ async function obtenerSiguienteFolio() {
       "(tipo:",
       typeof rows[0]?.ultimo + ")"
     );
-    console.log(" - Convertido a número:", ultimoFolio);
     console.log(" - Siguiente folio:", siguienteFolio);
 
     // --- Leer CAF disponibles ---
@@ -402,14 +401,8 @@ exports.emitirBoleta = async (req, res) => {
     const estadosValidos = ["ACE", "EPR", "REC", "SOK", "DOK"];
     const xmlBase64 = Buffer.from(dteXml, "utf-8").toString("base64");
 
-    if (!estadosValidos.includes(estado)) {
-      throw new Error(
-        `El SII rechazó la boleta. Estado: ${estado || "desconocido"} Folio: ${folioAsignado}`
-      );
-    }
-
-    // Guardar boleta real en DB
     try {
+      // Guardar boleta en DB sin importar el estado
       const [result] = await db.query(
         `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia)
      VALUES (?, ?, ?, NOW(), ?, ?, ?, 0)`,
@@ -418,6 +411,14 @@ exports.emitirBoleta = async (req, res) => {
       console.log("Boleta guardada en base de datos con folio:", folioAsignado);
     } catch (error) {
       console.error("Error guardando boleta:", error);
+    }
+
+    // Verificar si el SII rechazó para informar al front
+    if (!estadosValidos.includes(estado)) {
+      return res.status(400).json({
+        error: `El SII rechazó la boleta. Estado: ${estado || "desconocido"}`,
+        folio: folioAsignado,
+      });
     }
 
     res.status(201).json({
