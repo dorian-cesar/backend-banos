@@ -14,7 +14,7 @@ const EMISOR_DV = process.env.EMISOR_DV;
 const CERT_PATH = __dirname + "/../../certificado/certificado.pfx";
 const CERT_PASS = process.env.CERT_PASS;
 const CAF_DIRECTORY = __dirname + "/../../caf/";
-const ALERTA_MIN_FOLIOS = 1500;
+const ALERTA_MIN_FOLIOS = 10000;
 let CAF_PATH;
 
 // --- Función para crear payload según producto ---

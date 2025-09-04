@@ -4,11 +4,11 @@ const fs = require("fs");
 require("dotenv").config();
 
 // Configuración desde variables de entorno
-const API_USERNAME = process.env.SIMPLEAPI_USERNAME;
-const API_PASSWORD = process.env.SIMPLEAPI_PASSWORD;
+const API_USERNAME = "Diego Wigodski";
+const API_PASSWORD = "4024-N660-6392-3797-3736";
 const EMISOR_RUT = process.env.EMISOR_RUT;
 const EMISOR_DV = process.env.EMISOR_DV;
-const CERT_PATH = __dirname + "./certificado/certificado.pfx";
+const CERT_PATH = __dirname + "/certificado/certificado.pfx";
 const CERT_PASS = process.env.CERT_PASS;
 
 async function consultarFoliosBoleta() {
