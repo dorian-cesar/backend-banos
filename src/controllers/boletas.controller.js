@@ -142,7 +142,6 @@ exports.solicitarNuevosFolios = async (req, res) => {
 
 // Funciones auxiliares
 // --- Obtener siguiente folio revisando todos los CAF ---
-
 async function obtenerSiguienteFolio() {
   try {
     // --- Obtener último folio CON CONVERSIÓN A NÚMERO ---
@@ -312,6 +311,9 @@ exports.emitirBoleta = async (req, res) => {
     formGen.append("files2", fs.createReadStream(CAF_PATH));
     formGen.append("input", JSON.stringify(payload));
 
+    console.log(JSON.stringify(payload, null, 2));
+    console.log("Headers formGen:", formGen.getHeaders());
+
     const responseGen = await axios.post(`${API_URL}/dte/generar`, formGen, {
       headers: { Authorization: API_KEY, ...formGen.getHeaders() },
     });
@@ -402,7 +404,7 @@ exports.emitirBoleta = async (req, res) => {
 
     if (!estadosValidos.includes(estado)) {
       throw new Error(
-        `El SII rechazó la boleta. Estado: ${estado || "desconocido"}`
+        `El SII rechazó la boleta. Estado: ${estado || "desconocido"} Folio: ${folioAsignado}`
       );
     }
 
