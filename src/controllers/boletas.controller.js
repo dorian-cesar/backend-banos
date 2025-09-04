@@ -93,7 +93,7 @@ exports.solicitarNuevosFolios = async (req, res) => {
         RutCertificado: process.env.CERT_RUT,
         Password: CERT_PASS,
         RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
-        Ambiente: 0,
+        Ambiente: 1,
       })
     );
     data.append("files", fs.createReadStream(CERT_PATH));
@@ -240,8 +240,9 @@ async function obtenerSiguienteFolio() {
       cafSeleccionado,
       totalFoliosRestantes,
     };
-    // para pruebas
+    // prueba boleta ficticia
     // return {
+    //   folioAsignado: null,
     //   CAF_PATH: CAF_PATH_local,
     //   cafSeleccionado,
     //   totalFoliosRestantes,
@@ -275,8 +276,8 @@ exports.emitirBoleta = async (req, res) => {
   try {
     const { folioAsignado, CAF_PATH, totalFoliosRestantes } =
       await obtenerSiguienteFolio();
-      console.log("CAF_PATH:", CAF_PATH);
-      console.log("folioAsignado en flujo:", folioAsignado);
+    console.log("CAF_PATH:", CAF_PATH);
+    console.log("folioAsignado en flujo:", folioAsignado);
 
     // --- CASO: No hay folio disponible → boleta ficticia ---
     if (!folioAsignado) {
