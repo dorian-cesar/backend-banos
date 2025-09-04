@@ -93,7 +93,7 @@ exports.solicitarNuevosFolios = async (req, res) => {
         RutCertificado: process.env.CERT_RUT,
         Password: CERT_PASS,
         RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
-        Ambiente: 1,
+        Ambiente: 0,
       })
     );
     data.append("files", fs.createReadStream(CERT_PATH));
