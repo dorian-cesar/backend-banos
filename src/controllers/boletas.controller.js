@@ -10,10 +10,10 @@ const API_URL = process.env.SIMPLEAPI_URL;
 const API_KEY = process.env.SIMPLEAPI_KEY;
 const EMISOR_RUT = process.env.EMISOR_RUT;
 const EMISOR_DV = process.env.EMISOR_DV;
-const CERT_PATH = "../../certificado/certificado.pfx";
+const CERT_PATH = __dirname + "/../../certificado/certificado.pfx";
 const CERT_PASS = process.env.CERT_PASS;
 // const CAF_PATH = "./caf/caf.xml";
-const CAF_DIRECTORY = "../../caf/";
+const CAF_DIRECTORY = __dirname + "/../../caf/";
 const ALERTA_MIN_FOLIOS = 1500;
 let CAF_PATH;
 
