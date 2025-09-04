@@ -106,21 +106,18 @@ exports.forgot = async (req, res) => {
     const GENERIC_MSG = 'Si el correo existe, te enviaremos instrucciones.';
 
     try {
-        if (!email) return res.json({ ok: false, message: "Ingrese un correo válido" });
+        if (!email) return res.status(400).json({ ok: false, message: 'Ingrese un correo válido' });
 
         const normalized = String(email).toLowerCase().trim();
         const [rows] = await db.query('SELECT id, email, password FROM users WHERE email = ?', [normalized]);
-        if (rows.length === 0) return res.json({ ok: true, message: "El correo no existe" });
+        if (rows.length === 0) {
+            // Puedes responder genérico para no filtrar si existe o no
+            return res.json({ ok: true, message: GENERIC_MSG });
+        }
 
         const user = rows[0];
+        const token = jwt.sign({ sub: user.id, prp: 'pwd_reset', pw: user.password }, RESET_SECRET, { expiresIn: '30m' });
 
-        const token = jwt.sign(
-            { sub: user.id, prp: 'pwd_reset', pw: user.password },
-            RESET_SECRET,
-            { expiresIn: '30m' }
-        );
-
-        // 👇 Elige la URL correcta según de dónde vino la solicitud
         const APP_URL = getAppUrlFromReq(req);
         const resetUrl = `${APP_URL.replace(/\/+$/, '')}/reset?token=${encodeURIComponent(token)}`;
 
@@ -128,10 +125,12 @@ exports.forgot = async (req, res) => {
 
         return res.json({ ok: true, message: GENERIC_MSG });
     } catch (err) {
+        // Para ambiente de DEV, devuelve el detalle; en PROD, deja mensaje genérico y loguea
         console.error('Error en forgot:', err);
-        return res.json({ ok: true, message: GENERIC_MSG });
+        return res.status(500).json({ ok: false, message: 'No se pudo enviar el correo. Reintente más tarde.' });
     }
 };
+
 
 exports.reset = async (req, res) => {
     const { token, newPassword } = req.body;
