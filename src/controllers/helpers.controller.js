@@ -56,92 +56,240 @@ exports.getMetadata = async (req, res) => {
 exports.getResumenMetadata = async (req, res) => {
     try {
         const result = {};
-
-        // Total de usuarios únicos
+        // Usuarios totales (tabla users)
         const [[{ total_usuarios }]] = await db.query(`
-            SELECT COUNT(DISTINCT id_usuario) AS total_usuarios
-            FROM movimientos
-        `);
-        result.totalUsuarios = total_usuarios;
+      SELECT COUNT(*) AS total_usuarios
+      FROM users
+    `);
+        result.totalUsuarios = Number(total_usuarios || 0);
 
-        // Total de movimientos
+        // Movimientos totales (tabla movimientos)
         const [[{ total_movimientos }]] = await db.query(`
-            SELECT COUNT(*) AS total_movimientos
-            FROM movimientos
-        `);
-        result.totalMovimientos = total_movimientos;
+      SELECT COUNT(*) AS total_movimientos
+      FROM movimientos
+    `);
+        result.totalMovimientos = Number(total_movimientos || 0);
 
-        // Total de servicios únicos
+        // Servicios totales (tabla servicios)
         const [[{ total_servicios }]] = await db.query(`
-            SELECT COUNT(DISTINCT id_servicio) AS total_servicios
-            FROM movimientos
-        `);
-        result.totalServicios = total_servicios;
+      SELECT COUNT(*) AS total_servicios
+      FROM servicios
+      WHERE estado = "activo"
+    `);
+        result.totalServicios = Number(total_servicios || 0);
 
-        // Total de cajas únicas
+        // Cajas totales (tabla cajas)
         const [[{ total_cajas }]] = await db.query(`
-            SELECT COUNT(DISTINCT numero_caja) AS total_cajas
-            FROM movimientos
-        `);
-        result.totalCajas = total_cajas;
+      SELECT COUNT(*) AS total_cajas
+      FROM cajas
+    `);
+        result.totalCajas = Number(total_cajas || 0);
 
-        // Distribución por medio de pago (cantidad de transacciones)
+        // (Opcional) detalle de cajas por estado (tabla cajas)
+        const [[{ activas }]] = await db.query(`
+      SELECT COUNT(*) AS activas
+      FROM cajas
+      WHERE estado = 'activa'
+    `);
+        const [[{ inactivas }]] = await db.query(`
+      SELECT COUNT(*) AS inactivas
+      FROM cajas
+      WHERE estado = 'inactiva'
+    `);
+        result.cajasEstado = { activas: Number(activas || 0), inactivas: Number(inactivas || 0) };
+
+        // (Opcional) cajas abiertas hoy (tabla aperturas_cierres)
+        const [[{ abiertas_hoy }]] = await db.query(`
+      SELECT COUNT(DISTINCT numero_caja) AS abiertas_hoy
+      FROM aperturas_cierres
+      WHERE estado = 'abierta'
+        AND fecha_apertura = CURDATE()
+    `);
+        result.cajasAbiertasHoy = Number(abiertas_hoy || 0);
         const [conteoPorMedio] = await db.query(`
-            SELECT medio_pago, COUNT(*) AS total
-            FROM movimientos
-            GROUP BY medio_pago
-        `);
-        result.distribucionMediosPago = conteoPorMedio.reduce((acc, row) => {
-            acc[row.medio_pago] = row.total;
-            return acc;
-        }, {});
-
-        // Función auxiliar para obtener sumas por medio de pago en un rango de fechas
-        const getGananciasPorRango = async (rangoSQL) => {
-            const [rows] = await db.query(`
-                SELECT medio_pago, SUM(monto) AS total_monto
-                FROM movimientos
-                WHERE ${rangoSQL}
-                GROUP BY medio_pago
-            `);
-            const totales = rows.reduce((acc, row) => {
-                acc[row.medio_pago] = parseFloat(row.total_monto || 0);
-                return acc;
-            }, {});
-            return {
-                EFECTIVO: totales.EFECTIVO || 0,
-                TARJETA: totales.TARJETA || 0,
-                TOTAL: (totales.EFECTIVO || 0) + (totales.TARJETA || 0)
-            };
+      SELECT medio_pago, COUNT(*) AS total
+      FROM movimientos
+      GROUP BY medio_pago
+    `);
+        result.distribucionMediosPago = {
+            EFECTIVO: Number(conteoPorMedio.find(r => r.medio_pago === 'EFECTIVO')?.total || 0),
+            TARJETA: Number(conteoPorMedio.find(r => r.medio_pago === 'TARJETA')?.total || 0),
         };
 
-        // Ganancias totales
+        // Ganancias totales por medio
         const [montosPorMedio] = await db.query(`
-            SELECT medio_pago, SUM(monto) AS total_monto
-            FROM movimientos
-            GROUP BY medio_pago
-        `);
-        const gananciasTotales = montosPorMedio.reduce((acc, row) => {
-            acc[row.medio_pago] = parseFloat(row.total_monto || 0);
-            return acc;
-        }, {});
+      SELECT medio_pago, SUM(monto) AS total_monto
+      FROM movimientos
+      GROUP BY medio_pago
+    `);
+        const efectivoTotal = Number(montosPorMedio.find(r => r.medio_pago === 'EFECTIVO')?.total_monto || 0);
+        const tarjetaTotal = Number(montosPorMedio.find(r => r.medio_pago === 'TARJETA')?.total_monto || 0);
         result.totalGanancias = {
-            EFECTIVO: gananciasTotales.EFECTIVO || 0,
-            TARJETA: gananciasTotales.TARJETA || 0,
-            TOTAL: (gananciasTotales.EFECTIVO || 0) + (gananciasTotales.TARJETA || 0),
+            EFECTIVO: efectivoTotal,
+            TARJETA: tarjetaTotal,
+            TOTAL: efectivoTotal + tarjetaTotal,
         };
 
-        // Ganancias por rangos
-        result.totalGananciasHoy = await getGananciasPorRango(`DATE(fecha) = CURDATE()`);
+        // Helper para rangos de fecha (columna DATE `fecha` en movimientos)
+        const getGananciasPorRango = async (whereSql) => {
+            const [rows] = await db.query(`
+        SELECT medio_pago, SUM(monto) AS total_monto
+        FROM movimientos
+        WHERE ${whereSql}
+        GROUP BY medio_pago
+      `);
+            const e = Number(rows.find(r => r.medio_pago === 'EFECTIVO')?.total_monto || 0);
+            const t = Number(rows.find(r => r.medio_pago === 'TARJETA')?.total_monto || 0);
+            return { EFECTIVO: e, TARJETA: t, TOTAL: e + t };
+        };
+
+        // Ganancias por rangos (SIEMPRE en movimientos)
+        result.totalGananciasHoy = await getGananciasPorRango(`fecha = CURDATE()`);
         result.totalGananciasSemana = await getGananciasPorRango(`YEARWEEK(fecha, 1) = YEARWEEK(CURDATE(), 1)`);
         result.totalGananciasMes = await getGananciasPorRango(`YEAR(fecha) = YEAR(CURDATE()) AND MONTH(fecha) = MONTH(CURDATE())`);
         result.totalGananciasAnio = await getGananciasPorRango(`YEAR(fecha) = YEAR(CURDATE())`);
 
         res.json(result);
-
     } catch (error) {
         console.error('Error en getResumenMetadata:', error.message);
         res.status(500).json({ error: 'Error al obtener resumen de metadata' });
+    }
+};
+
+
+exports.getResumenPorCaja = async (req, res) => {
+    try {
+        const { fecha } = req.query; // "YYYY-MM-DD" opcional
+        const fechaFiltro = fecha || null;
+
+        // 1) Por-sesión (igual que antes, pero separando retiros)
+        const [rows] = await db.query(
+            `
+        SELECT
+          c.id,
+          c.numero_caja,
+          c.nombre,
+          c.ubicacion,
+          c.estado AS estado_caja,
+          c.descripcion,
+          COALESCE(ac.estado, 'cerrada') AS estado_apertura,
+  
+          ua.id       AS apertura_usuario_id,
+          ua.username AS apertura_usuario_nombre,
+          ua.email    AS apertura_usuario_email,
+  
+          ac.fecha_apertura AS apertura_fecha,
+          ac.hora_apertura  AS apertura_hora,
+
+          COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.medio_pago = 'EFECTIVO' THEN m.monto END), 0) AS efectivo,
+          COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.medio_pago = 'TARJETA'  THEN m.monto END), 0) AS tarjeta,
+          COALESCE(SUM(CASE WHEN m.id_servicio <> 999 THEN m.monto END), 0) AS total,
+
+          COALESCE(SUM(CASE WHEN m.id_servicio = 999 THEN m.monto END), 0) AS retiros,
+  
+          COUNT(m.id) AS transacciones,
+  
+          MIN(m.hora) AS primera_transaccion,
+          MAX(m.hora) AS ultima_transaccion
+  
+        FROM cajas c
+  
+        LEFT JOIN (
+          SELECT *
+          FROM (
+            SELECT
+              ac.*,
+              ROW_NUMBER() OVER (
+                PARTITION BY ac.numero_caja
+                ORDER BY
+                  (ac.estado = 'abierta') DESC,
+                  (ac.fecha_apertura = COALESCE(?, CURDATE())
+                   OR ac.fecha_cierre = COALESCE(?, CURDATE())) DESC,
+                  ac.id DESC
+              ) AS rn
+            FROM aperturas_cierres ac
+          ) z
+          WHERE z.rn = 1
+        ) ac
+          ON ac.numero_caja = c.numero_caja
+  
+        LEFT JOIN users ua
+          ON ua.id = ac.id_usuario_apertura
+
+        LEFT JOIN movimientos m
+          ON m.id_aperturas_cierres = ac.id
+  
+        GROUP BY
+          c.id, c.numero_caja, c.nombre, c.ubicacion, c.estado, c.descripcion,
+          ac.id, ac.estado, ac.fecha_apertura, ac.hora_apertura,
+          ua.id, ua.username, ua.email
+  
+        ORDER BY c.numero_caja ASC
+        `,
+            [fechaFiltro, fechaFiltro]
+        );
+
+        // 2) Totales del DÍA (todos los movimientos de la fecha, sin importar sesión)
+        const [totDiaRows] = await db.query(
+            `
+        SELECT
+          COALESCE(SUM(CASE WHEN id_servicio <> 999 AND medio_pago = 'EFECTIVO' THEN monto END), 0) AS efectivo,
+          COALESCE(SUM(CASE WHEN id_servicio <> 999 AND medio_pago = 'TARJETA'  THEN monto END), 0) AS tarjeta,
+          COALESCE(SUM(CASE WHEN id_servicio <> 999 THEN monto END), 0) AS total,
+  
+          COALESCE(SUM(CASE WHEN id_servicio = 999 THEN monto END), 0) AS retiros,
+  
+          COUNT(*) AS transacciones
+        FROM movimientos
+        WHERE fecha = COALESCE(?, CURDATE())
+        `,
+            [fechaFiltro]
+        );
+        const totalesDia = totDiaRows?.[0] || { efectivo: 0, tarjeta: 0, total: 0, retiros: 0, transacciones: 0 };
+
+        const cajas = rows.map(r => ({
+            id: r.id,
+            numero_caja: r.numero_caja,
+            nombre: r.nombre,
+            ubicacion: r.ubicacion,
+            estado_caja: r.estado_caja,
+            descripcion: r.descripcion,
+            estado_apertura: r.estado_apertura,
+            apertura: r.estado_apertura
+                ? {
+                    usuario: r.apertura_usuario_id ? {
+                        id: r.apertura_usuario_id,
+                        nombre: r.apertura_usuario_nombre,
+                        email: r.apertura_usuario_email,
+                    } : null,
+                    fecha: r.apertura_fecha,
+                    hora: r.apertura_hora,
+                }
+                : null,
+
+            /* Totales POSITIVOS por sesión */
+            efectivo: r.efectivo,
+            tarjeta: r.tarjeta,
+            total: r.total,
+
+            /* Retiros por sesión */
+            retiros: r.retiros,
+            // retiros_efectivo: r.retiros_efectivo,
+            // retiros_tarjeta: r.retiros_tarjeta,
+
+            transacciones: r.transacciones,
+            primera_transaccion: r.primera_transaccion,
+            ultima_transaccion: r.ultima_transaccion,
+        }));
+
+        res.json({
+            fecha: fecha || null,
+            cajas,           // métricas por sesión (positivos) + retiros por sesión
+            totales: totalesDia // totales del día (positivos) + retiros del día
+        });
+    } catch (error) {
+        console.error('Error en getResumenPorCaja:', error.message);
+        res.status(500).json({ error: 'Error al obtener resumen por caja' });
     }
 };
 

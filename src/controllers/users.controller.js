@@ -67,7 +67,6 @@ exports.getRoles = async (req, res) => {
     }
 };
 
-
 // Crear nuevo usuario
 exports.createUser = async (req, res) => {
     const { username, email, password, role } = req.body;
