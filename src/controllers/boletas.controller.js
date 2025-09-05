@@ -470,7 +470,7 @@ exports.emitirBoleta = async (req, res) => {
     let estado = null;
     let responseConsulta = null;
     const maxIntentos = 5;
-    const delayMs = 250;
+    const delayMs = 1500;
 
     for (let intento = 1; intento <= maxIntentos; intento++) {
       try {
