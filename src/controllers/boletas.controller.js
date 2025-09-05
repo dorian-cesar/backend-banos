@@ -399,8 +399,8 @@ exports.emitirBoleta = async (req, res) => {
     formGen.append("files", fs.createReadStream(CERT_PATH));
     formGen.append("files2", fs.createReadStream(CAF_PATH));
     formGen.append("input", JSON.stringify(payload));
-    console.log(JSON.stringify(payload, null, 2));
-    console.log("Headers formGen:", formGen.getHeaders());
+    // console.log(JSON.stringify(payload, null, 2));
+    // console.log("Headers formGen:", formGen.getHeaders());
 
     const responseGen = await axios.post(`${API_URL}/dte/generar`, formGen, {
       headers: { Authorization: API_KEY, ...formGen.getHeaders() },
@@ -522,7 +522,7 @@ exports.emitirBoleta = async (req, res) => {
       }
     } else {
       console.log(
-        "Folios suficientes, alerta = false para permitir futuras alertas..."
+        "Folios suficientes, no se envía mail de alerta"
       );
       alertaActual = false;
     }
