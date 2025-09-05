@@ -88,7 +88,7 @@ exports.obtenerFoliosRestantes = async (req, res) => {
     } catch (err) {
       console.warn("No se pudieron obtener datos de resolución:", err.message);
     }
-    
+
     console.log("Endpoint obtenerFoliosRestantes ejecutado con éxito");
 
     return res.status(200).json({
@@ -553,6 +553,9 @@ exports.emitirBoleta = async (req, res) => {
 
     // --- Verificar si el SII rechazó para informar al front ---
     if (!estadosValidos.includes(estado)) {
+      console.log(
+        `El SII rechazó la boleta. Estado: ${estado || "desconocido"}`
+      );
       return res.status(400).json({
         error: `El SII rechazó la boleta. Estado: ${estado || "desconocido"}`,
         folio: folioAsignado,
