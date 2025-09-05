@@ -283,13 +283,13 @@ async function obtenerSiguienteFolio() {
 }
 
 // --- Extraer datos de resolución desde CAF ---
-function obtenerDatosResolucion() {
-  const cafXml = fs.readFileSync(CAF_PATH, "utf-8");
+function obtenerDatosResolucion(cafPath) {
+  const cafXml = fs.readFileSync(cafPath, "utf-8");
   const faMatch = cafXml.match(/<FA>(.*?)<\/FA>/);
   const idkMatch = cafXml.match(/<IDK>(\d+)<\/IDK>/);
-
-  if (!faMatch || !idkMatch) throw new Error("CAF inválido");
-
+  if (!faMatch || !idkMatch) {
+    throw new Error(`CAF inválido o incompleto en: ${cafPath}`);
+  }
   return {
     FechaResolucion: faMatch[1],
     NumeroResolucion: parseInt(idkMatch[1], 10),
@@ -340,7 +340,7 @@ exports.emitirBoleta = async (req, res) => {
         [nombre, precio, fechaChile, "FICTICIA", null, null, null]
       );
 
-      return res.status(200).json({
+      return res.status(201).json({
         message:
           "No hay folios disponibles. Se generó una boleta ficticia para pruebas.",
         folio: folioFicticio,
@@ -371,7 +371,8 @@ exports.emitirBoleta = async (req, res) => {
     const dteXml = responseGen.data;
 
     // Generar Sobre de Envío
-    const { FechaResolucion, NumeroResolucion } = obtenerDatosResolucion();
+    const { FechaResolucion, NumeroResolucion } =
+      obtenerDatosResolucion(CAF_PATH);
     const formSobre = new FormData();
     formSobre.append(
       "input",
@@ -462,9 +463,9 @@ exports.emitirBoleta = async (req, res) => {
     // --- Verificar boleta anterior (antes de insertar la nueva) ---
     const [ultimaBoleta] = await db.query(
       `SELECT folio, alerta
-   FROM boletas
-   ORDER BY id DESC
-   LIMIT 1`
+      FROM boletas
+      ORDER BY id DESC
+      LIMIT 1`
     );
 
     const alertaAnterior = ultimaBoleta[0]?.alerta;
