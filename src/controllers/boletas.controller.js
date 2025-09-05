@@ -66,6 +66,43 @@ function crearPayload(producto, folio) {
   };
 }
 
+// --- Endpoint consultar folios restantes ---
+exports.obtenerFoliosRestantes = async (req, res) => {
+  try {
+    const { folioAsignado, CAF_PATH, cafSeleccionado, totalFoliosRestantes } =
+      await obtenerSiguienteFolio();
+
+    const ultimoFolio = folioAsignado ? Number(folioAsignado) - 1 : null;
+
+    if (!CAF_PATH) {
+      return res.status(404).json({
+        message: "No hay CAF disponibles para emitir boletas.",
+        ultimoFolio,
+        totalFoliosRestantes,
+      });
+    }
+
+    let resolucion = null;
+    try {
+      resolucion = obtenerDatosResolucion(CAF_PATH);
+    } catch (err) {
+      console.warn("No se pudieron obtener datos de resolución:", err.message);
+    }
+
+    return res.status(200).json({
+      caf: cafSeleccionado,
+      ultimoFolio,
+      totalFoliosRestantes,
+      resolucionCAF: resolucion,
+    });
+  } catch (error) {
+    console.error("Error obteniendo folios restantes:", error);
+    res
+      .status(500)
+      .json({ error: "Error al calcular folios restantes: " + error.message });
+  }
+};
+
 // --- Endpoint para solicitar nuevos folios ---
 exports.solicitarNuevosFolios = async (req, res) => {
   try {
