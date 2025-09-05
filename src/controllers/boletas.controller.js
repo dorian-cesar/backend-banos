@@ -357,6 +357,7 @@ function obtenerFechaHoraChile() {
 const fechaChile = obtenerFechaHoraChile();
 
 // --- Endpoint emitirBoleta con flujo principal ---
+// --- Endpoint emitirBoleta con flujo principal ---
 exports.emitirBoleta = async (req, res) => {
   const { nombre, precio } = req.body;
   if (!nombre || !precio)
@@ -401,8 +402,6 @@ exports.emitirBoleta = async (req, res) => {
     formGen.append("files", fs.createReadStream(CERT_PATH));
     formGen.append("files2", fs.createReadStream(CAF_PATH));
     formGen.append("input", JSON.stringify(payload));
-    // console.log(JSON.stringify(payload, null, 2));
-    // console.log("Headers formGen:", formGen.getHeaders());
 
     const responseGen = await axios.post(`${API_URL}/dte/generar`, formGen, {
       headers: { Authorization: API_KEY, ...formGen.getHeaders() },
@@ -464,51 +463,81 @@ exports.emitirBoleta = async (req, res) => {
     );
 
     const trackId = responseEnvio.data?.trackId;
+    console.log("TrackId recibido:", trackId);
 
-    // Consultar estado
-    const formConsulta = new FormData();
-    formConsulta.append("files", fs.createReadStream(CERT_PATH));
-    formConsulta.append(
-      "input",
-      JSON.stringify({
-        Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-        RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
-        TrackId: trackId,
-        Ambiente: 1,
-        ServidorBoletaREST: true,
-      })
-    );
-
-    const responseConsulta = await axios.post(
-      `${API_URL}/consulta/envio`,
-      formConsulta,
-      {
-        headers: { Authorization: API_KEY, ...formConsulta.getHeaders() },
-      }
-    );
-
-    const estado = responseConsulta.data?.estado;
+    // --- CONSULTA AL SII CON REINTENTOS ---
     const estadosValidos = ["ACE", "EPR", "REC", "SOK", "DOK"];
+    let estado = null;
+    let responseConsulta = null;
+    const maxIntentos = 10;
+    const delayMs = 5000;
+
+    for (let intento = 1; intento <= maxIntentos; intento++) {
+      try {
+        const formConsulta = new FormData();
+        formConsulta.append("files", fs.createReadStream(CERT_PATH));
+        formConsulta.append(
+          "input",
+          JSON.stringify({
+            Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
+            RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
+            TrackId: trackId,
+            Ambiente: 1,
+            ServidorBoletaREST: true,
+          })
+        );
+
+        responseConsulta = await axios.post(
+          `${API_URL}/consulta/envio`,
+          formConsulta,
+          {
+            headers: { Authorization: API_KEY, ...formConsulta.getHeaders() },
+          }
+        );
+
+        estado = responseConsulta.data?.estado;
+        console.log(`Intento ${intento} - Estado SII: ${estado}`);
+
+        if (estado && estadosValidos.includes(estado)) {
+          console.log("Estado aceptado por SII:", estado);
+          break;
+        }
+      } catch (err) {
+        console.warn(`Intento ${intento} fallido:`, err.message);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+
+    if (!estado || !estadosValidos.includes(estado)) {
+      console.log(
+        `No se obtuvo estado válido después de ${maxIntentos} intentos.`
+      );
+      return res.status(400).json({
+        error: `No se obtuvo estado válido del SII.`,
+        folio: folioAsignado,
+      });
+    }
+
     const xmlBase64 = Buffer.from(dteXml, "utf-8").toString("base64");
 
     // --- Ajustar folio si estado es RSC ---
     let folioParaGuardar = folioAsignado;
     if (estado === "RSC") {
-      // Genera un número aleatorio de 6 dígitos para anexar al folio
       const randomSuffix = Math.floor(Math.random() * 900000) + 100000;
       folioParaGuardar = `${folioAsignado}-${randomSuffix}`;
     }
 
-    // --- Verificar boleta anterior (antes de insertar la nueva) ---
+    // --- Verificar boleta anterior ---
     const [ultimaBoleta] = await db.query(
       `SELECT folio, alerta
-      FROM boletas
-      ORDER BY id DESC
-      LIMIT 1`
+       FROM boletas
+       ORDER BY id DESC
+       LIMIT 1`
     );
 
     const alertaAnterior = ultimaBoleta[0]?.alerta;
-    let alertaActual = false; // valor por defecto
+    let alertaActual = false;
 
     // --- Evaluar si mandar correo ---
     if (totalFoliosRestantes < ALERTA_MIN_FOLIOS) {
@@ -520,12 +549,10 @@ exports.emitirBoleta = async (req, res) => {
         console.log(
           "Alerta ya enviada en la boleta anterior. No se envía mail nuevamente."
         );
-        alertaActual = true; // mantener la continuidad de la alerta
+        alertaActual = true;
       }
     } else {
-      console.log(
-        "Folios suficientes, no se envía mail de alerta"
-      );
+      console.log("Folios suficientes, no se envía mail de alerta");
       alertaActual = false;
     }
 
@@ -550,17 +577,6 @@ exports.emitirBoleta = async (req, res) => {
       "| alerta:",
       alertaActual
     );
-
-    // --- Verificar si el SII rechazó para informar al front ---
-    if (!estadosValidos.includes(estado)) {
-      console.log(
-        `El SII rechazó la boleta. Estado: ${estado || "desconocido"}`
-      );
-      return res.status(400).json({
-        error: `El SII rechazó la boleta. Estado: ${estado || "desconocido"}`,
-        folio: folioAsignado,
-      });
-    }
 
     res.status(201).json({
       message: "Boleta generada correctamente",

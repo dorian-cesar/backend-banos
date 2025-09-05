@@ -4,3 +4,6 @@ cert/
 caf
 res.txt
 consulta-folios.js
+consulta-dte.js
+certificado/certificado.pem
+certificado/clave.pem
