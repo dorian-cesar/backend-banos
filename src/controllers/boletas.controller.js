@@ -469,8 +469,8 @@ exports.emitirBoleta = async (req, res) => {
     const estadosValidos = ["ACE", "EPR", "REC", "SOK", "DOK"];
     let estado = null;
     let responseConsulta = null;
-    const maxIntentos = 10;
-    const delayMs = 5000;
+    const maxIntentos = 5;
+    const delayMs = 250;
 
     for (let intento = 1; intento <= maxIntentos; intento++) {
       try {
