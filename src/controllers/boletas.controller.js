@@ -27,7 +27,7 @@ function crearPayload(producto, folio) {
           Folio: folio,
           FechaEmision: new Date().toISOString().split("T")[0],
           IndicadorServicio: 3,
-          IndicadorMontosNetosBoleta: 1,
+          IndicadorMontosNetosBoleta: 2,
         },
         Emisor: {
           Rut: `${EMISOR_RUT}-${EMISOR_DV}`,
@@ -362,7 +362,6 @@ exports.emitirBoleta = async (req, res) => {
     const { folioAsignado, CAF_PATH, totalFoliosRestantes } =
       await obtenerSiguienteFolio();
     console.log("CAF_PATH:", CAF_PATH);
-    console.log("folioAsignado en flujo:", folioAsignado);
 
     // --- CASO: No hay folio disponible → boleta ficticia ---
     if (!folioAsignado) {
