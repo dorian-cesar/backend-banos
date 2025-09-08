@@ -172,29 +172,52 @@ exports.getResumenPorCaja = async (req, res) => {
           c.ubicacion,
           c.estado AS estado_caja,
           c.descripcion,
-          COALESCE(ac.estado, 'cerrada') AS estado_apertura,
-  
+    
+          ac.estado AS estado_apertura,
+    
           ua.id       AS apertura_usuario_id,
           ua.username AS apertura_usuario_nombre,
           ua.email    AS apertura_usuario_email,
-  
+    
           ac.fecha_apertura AS apertura_fecha,
           ac.hora_apertura  AS apertura_hora,
-          ac.monto_inicial AS monto_inicial,
-
-          COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.medio_pago = 'EFECTIVO' THEN m.monto END), 0) AS efectivo,
-          COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.medio_pago = 'TARJETA'  THEN m.monto END), 0) AS tarjeta,
-          COALESCE(SUM(CASE WHEN m.id_servicio <> 999 THEN m.monto END), 0) AS total,
-
-          COALESCE(SUM(CASE WHEN m.id_servicio = 999 THEN m.monto END), 0) AS retiros,
-  
-          COUNT(m.id) AS transacciones,
-  
-          MIN(m.hora) AS primera_transaccion,
-          MAX(m.hora) AS ultima_transaccion
-  
+          ac.monto_inicial  AS monto_inicial,
+    
+          ac.fecha_cierre    AS cierre_fecha,
+          ac.hora_cierre     AS cierre_hora,
+    
+          COALESCE(SUM(CASE 
+            WHEN m.id_servicio <> 999 AND m.medio_pago = 'EFECTIVO' 
+                 AND m.fecha = COALESCE(?, m.fecha)
+            THEN m.monto END), 0) AS efectivo,
+    
+          COALESCE(SUM(CASE 
+            WHEN m.id_servicio <> 999 AND m.medio_pago = 'TARJETA' 
+                 AND m.fecha = COALESCE(?, m.fecha)
+            THEN m.monto END), 0) AS tarjeta,
+    
+          COALESCE(SUM(CASE 
+            WHEN m.id_servicio <> 999 
+                 AND m.fecha = COALESCE(?, m.fecha)
+            THEN m.monto END), 0) AS total,
+    
+          COALESCE(SUM(CASE 
+            WHEN m.id_servicio = 999 
+                 AND m.fecha = COALESCE(?, m.fecha)
+            THEN m.monto END), 0) AS retiros,
+    
+          COALESCE(SUM(CASE 
+            WHEN m.id_servicio <> 999 
+                 AND m.fecha = COALESCE(?, m.fecha)
+            THEN 1 END), 0) AS transacciones,
+    
+          MIN(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.hora  END) AS primera_transaccion,
+          MAX(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.hora  END) AS ultima_transaccion,
+          MIN(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.fecha END) AS fecha_primera_transaccion,
+          MAX(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.fecha END) AS fecha_ultima_transaccion
+    
         FROM cajas c
-  
+    
         LEFT JOIN (
           SELECT *
           FROM (
@@ -205,7 +228,7 @@ exports.getResumenPorCaja = async (req, res) => {
                 ORDER BY
                   (ac.estado = 'abierta') DESC,
                   (ac.fecha_apertura = COALESCE(?, CURDATE())
-                   OR ac.fecha_cierre = COALESCE(?, CURDATE())) DESC,
+                   OR ac.fecha_cierre  = COALESCE(?, CURDATE())) DESC,
                   ac.id DESC
               ) AS rn
             FROM aperturas_cierres ac
@@ -213,22 +236,37 @@ exports.getResumenPorCaja = async (req, res) => {
           WHERE z.rn = 1
         ) ac
           ON ac.numero_caja = c.numero_caja
-  
+    
         LEFT JOIN users ua
           ON ua.id = ac.id_usuario_apertura
-
+    
         LEFT JOIN movimientos m
           ON m.id_aperturas_cierres = ac.id
-  
+    
         GROUP BY
           c.id, c.numero_caja, c.nombre, c.ubicacion, c.estado, c.descripcion,
           ac.id, ac.estado, ac.fecha_apertura, ac.hora_apertura, ac.monto_inicial,
+          ac.fecha_cierre, ac.hora_cierre,
           ua.id, ua.username, ua.email
-  
+    
         ORDER BY c.numero_caja ASC
-        `,
-      [fechaFiltro, fechaFiltro]
+      `,
+      [
+        fechaFiltro, // efectivo
+        fechaFiltro, // tarjeta
+        fechaFiltro, // total
+        fechaFiltro, // retiros
+        fechaFiltro, // transacciones
+        fechaFiltro, // primera_transaccion (hora)
+        fechaFiltro, // ultima_transaccion (hora)
+        fechaFiltro, // fecha_primera_transaccion
+        fechaFiltro, // fecha_ultima_transaccion
+
+        fechaFiltro, // ac.fecha_apertura = COALESCE(?, CURDATE())
+        fechaFiltro  // ac.fecha_cierre   = COALESCE(?, CURDATE())
+      ]
     );
+
 
     // 2) Totales del DÍA (todos los movimientos de la fecha, sin importar sesión)
     const [totDiaRows] = await db.query(
@@ -256,31 +294,39 @@ exports.getResumenPorCaja = async (req, res) => {
       estado_caja: r.estado_caja,
       descripcion: r.descripcion,
       estado_apertura: r.estado_apertura,
+
       apertura: r.estado_apertura
         ? {
-          usuario: r.apertura_usuario_id ? {
-            id: r.apertura_usuario_id,
-            nombre: r.apertura_usuario_nombre,
-            email: r.apertura_usuario_email,
-          } : null,
+          usuario: r.apertura_usuario_id
+            ? {
+              id: r.apertura_usuario_id,
+              nombre: r.apertura_usuario_nombre,
+              email: r.apertura_usuario_email,
+            }
+            : null,
           fecha: r.apertura_fecha,
           hora: r.apertura_hora,
         }
         : null,
+
+      cierre: r.estado_apertura === 'cerrada'
+        ? {
+          fecha: r.cierre_fecha || null,
+          hora: r.cierre_hora || null,
+        }
+        : null,
+
       monto_inicial: r.monto_inicial ?? 0,
-      /* Totales POSITIVOS por sesión */
       efectivo: r.efectivo,
       tarjeta: r.tarjeta,
       total: r.total,
-
-      /* Retiros por sesión */
       retiros: r.retiros,
-      // retiros_efectivo: r.retiros_efectivo,
-      // retiros_tarjeta: r.retiros_tarjeta,
 
       transacciones: r.transacciones,
       primera_transaccion: r.primera_transaccion,
       ultima_transaccion: r.ultima_transaccion,
+      fecha_primera_transaccion: r.fecha_primera_transaccion,
+      fecha_ultima_transaccion: r.fecha_ultima_transaccion,
     }));
 
     res.json({
