@@ -71,7 +71,6 @@ exports.obtenerFoliosRestantes = async (req, res) => {
   try {
     const { folioAsignado, CAF_PATH, cafSeleccionado, totalFoliosRestantes } =
       await obtenerSiguienteFolio();
-
     const ultimoFolio = folioAsignado ? Number(folioAsignado) - 1 : null;
 
     if (!CAF_PATH) {
@@ -90,7 +89,6 @@ exports.obtenerFoliosRestantes = async (req, res) => {
     }
 
     console.log("Endpoint obtenerFoliosRestantes ejecutado con éxito");
-
     return res.status(200).json({
       caf: cafSeleccionado,
       ultimoFolio,
@@ -138,7 +136,10 @@ exports.solicitarNuevosFolios = async (req, res) => {
     data.append("files", fs.createReadStream(CERT_PATH));
 
     const response = await axios.post(url, data, {
-      headers: { ...data.getHeaders(), Authorization: API_KEY },
+      headers: {
+        ...data.getHeaders(),
+        Authorization: API_KEY,
+      },
       maxBodyLength: Infinity,
       timeout: 120000,
     });
@@ -153,10 +154,8 @@ exports.solicitarNuevosFolios = async (req, res) => {
       const timestamp = new Date().toISOString().replace(/[-:.]/g, "");
       const nombreArchivo = `caf_${timestamp}.xml`;
       const rutaArchivo = path.join(CAF_DIRECTORY, nombreArchivo);
-
       fs.writeFileSync(rutaArchivo, response.data, "utf-8");
       console.log(`CAF guardado correctamente en: ${rutaArchivo}`);
-
       return res.status(201).json({
         message: "Nuevos folios solicitados correctamente",
         cafGuardadoEn: rutaArchivo,
@@ -181,6 +180,7 @@ exports.solicitarNuevosFolios = async (req, res) => {
 };
 
 // Funciones auxiliares
+
 // Envío de email
 async function enviarAlertaCorreo(totalFoliosRestantes) {
   try {
@@ -197,9 +197,7 @@ async function enviarAlertaCorreo(totalFoliosRestantes) {
       // to: "dwigodski@wit.la, sandoval.jesus2005@gmail.com",
       to: "dwigodski@wit.la",
       subject: "🚨 Alerta: folios disponibles bajos!",
-      text: `Quedan solo ${totalFoliosRestantes} folios disponibles en el sistema de boletas de Baño y Duchas en el Terminal.\n
-        Por favor solicita nuevos folios lo antes posible.\n
-        Solicita la obtención de nuevos folios con sus credenciales aquí: https://mantenedor-banios.netlify.app/dashboard/folios\n`,
+      text: `Quedan solo ${totalFoliosRestantes} folios disponibles en el sistema de boletas de Baño y Duchas en el Terminal.\n Por favor solicita nuevos folios lo antes posible.\n Solicita la obtención de nuevos folios con sus credenciales aquí: https://mantenedor-banios.netlify.app/dashboard/folios\n`,
     });
 
     console.log("Correo de alerta de folios enviado:", info.messageId);
@@ -212,14 +210,9 @@ async function enviarAlertaCorreo(totalFoliosRestantes) {
 async function obtenerSiguienteFolio() {
   try {
     // --- Obtener último folio CON CONVERSIÓN A NÚMERO ---
-    const [rows] = await db.query(`
-      SELECT MAX(folio) as ultimo
-      FROM boletas
-      WHERE (ficticia IS NULL OR ficticia = 0)
-        AND (estado_sii IS NULL OR estado_sii != 'RSC')
-        AND folio NOT REGEXP '-[0-9]+$'
-    `);
-
+    const [rows] = await db.query(
+      `SELECT MAX(folio) as ultimo FROM boletas WHERE (ficticia IS NULL OR ficticia = 0) AND (estado_sii IS NULL OR estado_sii != 'RSC') AND folio NOT REGEXP '-[0-9]+$'`
+    );
     // Conversión explícita a número
     const ultimoFolio = Number(rows[0]?.ultimo) || 0;
     const siguienteFolio = ultimoFolio + 1;
@@ -251,7 +244,6 @@ async function obtenerSiguienteFolio() {
         const rngMatch = cafXml.match(
           /<RNG>\s*<D>(\d+)<\/D>\s*<H>(\d+)<\/H>\s*<\/RNG>/
         );
-
         if (!rngMatch) return null;
 
         return {
@@ -308,6 +300,7 @@ async function obtenerSiguienteFolio() {
       cafSeleccionado,
       totalFoliosRestantes,
     };
+
     // prueba boleta ficticia
     // return {
     //   folioAsignado: null,
@@ -326,9 +319,11 @@ function obtenerDatosResolucion(cafPath) {
   const cafXml = fs.readFileSync(cafPath, "utf-8");
   const faMatch = cafXml.match(/<FA>(.*?)<\/FA>/);
   const idkMatch = cafXml.match(/<IDK>(\d+)<\/IDK>/);
+
   if (!faMatch || !idkMatch) {
     throw new Error(`CAF inválido o incompleto en: ${cafPath}`);
   }
+
   return {
     FechaResolucion: faMatch[1],
     NumeroResolucion: parseInt(idkMatch[1], 10),
@@ -346,6 +341,7 @@ function obtenerFechaHoraChile() {
     second: "2-digit",
     hour12: false,
   };
+
   const fechaChile = new Intl.DateTimeFormat("es-CL", opciones).format(
     new Date()
   );
@@ -356,7 +352,6 @@ function obtenerFechaHoraChile() {
 
 const fechaChile = obtenerFechaHoraChile();
 
-// --- Endpoint emitirBoleta con flujo principal ---
 // --- Endpoint emitirBoleta con flujo principal ---
 exports.emitirBoleta = async (req, res) => {
   const { nombre, precio } = req.body;
@@ -375,8 +370,7 @@ exports.emitirBoleta = async (req, res) => {
       console.log("No hay folios disponibles. Boleta ficticia:", folioFicticio);
 
       await db.query(
-        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
-         VALUES (NULL, ?, ?, ?, ?, ?, ?, 1, FALSE)`,
+        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta) VALUES (NULL, ?, ?, ?, ?, ?, ?, 1, FALSE)`,
         [nombre, precio, fechaChile, "FICTICIA", null, null, null]
       );
 
@@ -391,6 +385,7 @@ exports.emitirBoleta = async (req, res) => {
     // --- Boleta real ---
     const producto = { nombre, precio };
     const payload = crearPayload(producto, folioAsignado);
+
     console.log("Folio Asignado:", folioAsignado);
     console.log("__dirname:", __dirname);
     console.log("CAF_PATH absoluto:", CAF_PATH);
@@ -403,8 +398,14 @@ exports.emitirBoleta = async (req, res) => {
     formGen.append("files2", fs.createReadStream(CAF_PATH));
     formGen.append("input", JSON.stringify(payload));
 
+    // console.log(JSON.stringify(payload, null, 2));
+    // console.log("Headers formGen:", formGen.getHeaders());
+
     const responseGen = await axios.post(`${API_URL}/dte/generar`, formGen, {
-      headers: { Authorization: API_KEY, ...formGen.getHeaders() },
+      headers: {
+        Authorization: API_KEY,
+        ...formGen.getHeaders(),
+      },
     });
     const dteXml = responseGen.data;
 
@@ -415,7 +416,10 @@ exports.emitirBoleta = async (req, res) => {
     formSobre.append(
       "input",
       JSON.stringify({
-        Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
+        Certificado: {
+          Rut: process.env.CERT_RUT,
+          Password: CERT_PASS,
+        },
         Caratula: {
           RutEmisor: `${EMISOR_RUT}-${EMISOR_DV}`,
           RutReceptor: "60803000-K",
@@ -433,7 +437,10 @@ exports.emitirBoleta = async (req, res) => {
       `${API_URL}/envio/generar`,
       formSobre,
       {
-        headers: { Authorization: API_KEY, ...formSobre.getHeaders() },
+        headers: {
+          Authorization: API_KEY,
+          ...formSobre.getHeaders(),
+        },
         maxBodyLength: Infinity,
       }
     );
@@ -448,7 +455,10 @@ exports.emitirBoleta = async (req, res) => {
     formEnvio.append(
       "input",
       JSON.stringify({
-        Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
+        Certificado: {
+          Rut: process.env.CERT_RUT,
+          Password: CERT_PASS,
+        },
         Ambiente: 1,
         Tipo: 2,
       })
@@ -458,86 +468,60 @@ exports.emitirBoleta = async (req, res) => {
       `${API_URL}/envio/enviar`,
       formEnvio,
       {
-        headers: { Authorization: API_KEY, ...formEnvio.getHeaders() },
+        headers: {
+          Authorization: API_KEY,
+          ...formEnvio.getHeaders(),
+        },
       }
     );
-
     const trackId = responseEnvio.data?.trackId;
     console.log("TrackId recibido:", trackId);
 
-    // --- CONSULTA AL SII CON REINTENTOS ---
-    const estadosValidos = ["ACE", "EPR", "REC", "SOK", "DOK"];
-    let estado = null;
-    let responseConsulta = null;
-    const maxIntentos = 5;
-    const delayMs = 1500;
+    // Consultar estado
+    const formConsulta = new FormData();
+    formConsulta.append("files", fs.createReadStream(CERT_PATH));
+    formConsulta.append(
+      "input",
+      JSON.stringify({
+        Certificado: {
+          Rut: process.env.CERT_RUT,
+          Password: CERT_PASS,
+        },
+        RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
+        TrackId: trackId,
+        Ambiente: 1,
+        ServidorBoletaREST: true,
+      })
+    );
 
-    for (let intento = 1; intento <= maxIntentos; intento++) {
-      try {
-        const formConsulta = new FormData();
-        formConsulta.append("files", fs.createReadStream(CERT_PATH));
-        formConsulta.append(
-          "input",
-          JSON.stringify({
-            Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-            RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
-            TrackId: trackId,
-            Ambiente: 1,
-            ServidorBoletaREST: true,
-          })
-        );
-
-        responseConsulta = await axios.post(
-          `${API_URL}/consulta/envio`,
-          formConsulta,
-          {
-            headers: { Authorization: API_KEY, ...formConsulta.getHeaders() },
-          }
-        );
-
-        estado = responseConsulta.data?.estado;
-        console.log(`Intento ${intento} - Estado SII: ${estado}`);
-
-        if (estado && estadosValidos.includes(estado)) {
-          console.log("Estado aceptado por SII:", estado);
-          break;
-        }
-      } catch (err) {
-        console.warn(`Intento ${intento} fallido:`, err.message);
+    const responseConsulta = await axios.post(
+      `${API_URL}/consulta/envio`,
+      formConsulta,
+      {
+        headers: {
+          Authorization: API_KEY,
+          ...formConsulta.getHeaders(),
+        },
       }
-
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-
-    if (!estado || !estadosValidos.includes(estado)) {
-      console.log(
-        `No se obtuvo estado válido después de ${maxIntentos} intentos.`
-      );
-      return res.status(400).json({
-        error: `No se obtuvo estado válido del SII.`,
-        folio: folioAsignado,
-      });
-    }
-
+    );
+    const estado = responseConsulta.data?.estado;
+    const estadosValidos = ["ACE", "EPR", "REC", "SOK", "DOK"];
     const xmlBase64 = Buffer.from(dteXml, "utf-8").toString("base64");
 
     // --- Ajustar folio si estado es RSC ---
     let folioParaGuardar = folioAsignado;
     if (estado === "RSC") {
+      // Genera un número aleatorio de 6 dígitos para anexar al folio
       const randomSuffix = Math.floor(Math.random() * 900000) + 100000;
       folioParaGuardar = `${folioAsignado}-${randomSuffix}`;
     }
 
-    // --- Verificar boleta anterior ---
+    // --- Verificar boleta anterior (antes de insertar la nueva) ---
     const [ultimaBoleta] = await db.query(
-      `SELECT folio, alerta
-       FROM boletas
-       ORDER BY id DESC
-       LIMIT 1`
+      `SELECT folio, alerta FROM boletas ORDER BY id DESC LIMIT 1`
     );
-
     const alertaAnterior = ultimaBoleta[0]?.alerta;
-    let alertaActual = false;
+    let alertaActual = false; // valor por defecto
 
     // --- Evaluar si mandar correo ---
     if (totalFoliosRestantes < ALERTA_MIN_FOLIOS) {
@@ -549,7 +533,7 @@ exports.emitirBoleta = async (req, res) => {
         console.log(
           "Alerta ya enviada en la boleta anterior. No se envía mail nuevamente."
         );
-        alertaActual = true;
+        alertaActual = true; // mantener la continuidad de la alerta
       }
     } else {
       console.log("Folios suficientes, no se envía mail de alerta");
@@ -558,8 +542,7 @@ exports.emitirBoleta = async (req, res) => {
 
     // --- Guardar boleta en DB con alerta definida ---
     await db.query(
-      `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+      `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
       [
         folioParaGuardar,
         nombre,
@@ -571,12 +554,24 @@ exports.emitirBoleta = async (req, res) => {
         alertaActual,
       ]
     );
+
     console.log(
       "Boleta guardada en base de datos con folio:",
       folioParaGuardar,
       "| alerta:",
       alertaActual
     );
+
+    // --- Verificar si el SII rechazó para informar al front ---
+    if (!estadosValidos.includes(estado)) {
+      console.log(
+        `El SII rechazó la boleta. Estado: ${estado || "desconocido"}`
+      );
+      return res.status(400).json({
+        error: `El SII rechazó la boleta. Estado: ${estado || "desconocido"}`,
+        folio: folioAsignado,
+      });
+    }
 
     res.status(201).json({
       message: "Boleta generada correctamente",
