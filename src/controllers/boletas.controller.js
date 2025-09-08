@@ -409,6 +409,9 @@ exports.emitirBoleta = async (req, res) => {
     });
     const dteXml = responseGen.data;
 
+    console.log("XML generado (primeras 500 chars):");
+    console.log(dteXml.substring(0, 500));
+
     // Generar Sobre de Envío
     const { FechaResolucion, NumeroResolucion } =
       obtenerDatosResolucion(CAF_PATH);
@@ -464,6 +467,8 @@ exports.emitirBoleta = async (req, res) => {
       })
     );
 
+    console.log("Form envio:", formEnvio);
+
     const responseEnvio = await axios.post(
       `${API_URL}/envio/enviar`,
       formEnvio,
@@ -490,7 +495,7 @@ exports.emitirBoleta = async (req, res) => {
         RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
         TrackId: trackId,
         Ambiente: 1,
-        ServidorBoletaREST: true,
+        ServidorBoletaREST: 1,
       })
     );
 
@@ -505,6 +510,7 @@ exports.emitirBoleta = async (req, res) => {
       }
     );
     const estado = responseConsulta.data?.estado;
+    console.log("Response Estado SII:", responseConsulta.data);
     const estadosValidos = ["ACE", "EPR", "REC", "SOK", "DOK"];
     const xmlBase64 = Buffer.from(dteXml, "utf-8").toString("base64");
 
