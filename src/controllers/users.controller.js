@@ -10,29 +10,52 @@ function isValidEmail(email) {
 // Obtener todos los usuarios
 exports.getAllUsers = async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const pageSize = parseInt(req.query.pageSize) || 10;
-        const search = req.query.search ? `%${req.query.search}%` : '%%';
-        const offset = (page - 1) * pageSize;
+        const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+        const pageSize = Math.min(Math.max(parseInt(req.query.pageSize, 10) || 10, 1), 100);
+        const searchRaw = (req.query.search || '').trim();
+        const requesterRole = (req.user?.role || '').toLowerCase();
 
+        const where = [];
+        const params = [];
+
+        // Búsqueda
+        if (searchRaw) {
+            const search = `%${searchRaw}%`;
+            where.push(`(username LIKE ? OR email LIKE ? OR role LIKE ?)`);
+            params.push(search, search, search);
+        }
+
+        // Si NO es admin, no puede ver admins
+        if (requesterRole !== 'admin') {
+            where.push(`LOWER(role) <> 'admin'`);
+        }
+
+        //no mostrar admin principal
+        where.push(`id <> 1`);
+
+        const whereSQL = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+        // Total con el mismo WHERE
         const [[{ total }]] = await db.query(
-            `SELECT COUNT(*) AS total 
-             FROM users 
-             WHERE username LIKE ? OR email LIKE ? OR role LIKE ?`,
-            [search, search, search]
+            `SELECT COUNT(*) AS total FROM users ${whereSQL}`,
+            params
         );
 
+        const offset = (page - 1) * pageSize;
+
+        // Datos con el mismo WHERE
         const [results] = await db.query(
             `SELECT id, username, email, role
-             FROM users
-             WHERE username LIKE ? OR email LIKE ? OR role LIKE ?
-             ORDER BY id DESC
-             LIMIT ? OFFSET ?`,
-            [search, search, search, pageSize, offset]
+         FROM users
+         ${whereSQL}
+         ORDER BY id DESC
+         LIMIT ? OFFSET ?`,
+            [...params, pageSize, offset]
         );
 
         res.json({ total, page, pageSize, data: results });
     } catch (err) {
+        console.error('getAllUsers error:', err);
         res.status(500).json({ error: err.message });
     }
 };
