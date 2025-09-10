@@ -207,3 +207,108 @@ exports.cerrarCaja = async (req, res) => {
         });
     }
 };
+
+exports.registrarRetiro = async (req, res) => {
+    try {
+        const { numero_caja, monto, id_usuario, motivo, nombre_cajero } = req.body;
+
+        // Validaciones
+        if (!monto || isNaN(monto) || parseFloat(monto) <= 0) {
+            return res.status(400).json({ success: false, message: 'Monto inválido' });
+        }
+
+        if (!id_usuario || isNaN(id_usuario)) {
+            return res.status(400).json({ success: false, message: 'ID de usuario inválido' });
+        }
+
+        // Obtener ID de la sesión de caja abierta
+        const [apertura] = await pool.execute(
+            'SELECT id FROM aperturas_cierres WHERE numero_caja = ? AND estado = "abierta" ORDER BY id DESC LIMIT 1',
+            [numero_caja]
+        );
+
+        if (apertura.length === 0) {
+            return res.status(400).json({ success: false, message: 'No hay caja abierta' });
+        }
+
+        const id_aperturas_cierres = apertura[0].id;
+
+        // Obtener información del usuario que AUTORIZA el retiro (admin/recaudador)
+        const [usuario] = await pool.execute(
+            'SELECT username FROM users WHERE id = ?',
+            [id_usuario]
+        );
+
+        if (usuario.length === 0) {
+            return res.status(400).json({ success: false, message: 'Usuario no encontrado' });
+        }
+
+        const nombre_autorizador = usuario[0].username;
+
+        // Obtener el nombre de la caja desde la tabla cajas
+        const [cajaInfo] = await pool.execute(
+            'SELECT nombre FROM cajas WHERE numero_caja = ?',
+            [numero_caja]
+        );
+
+        const nombre_caja = cajaInfo.length > 0 ? cajaInfo[0].nombre : `Caja ${numero_caja}`;
+
+        // Usar ID fijo para retiros (debe existir en la tabla servicios)
+        const id_servicio = 999; // ID del servicio de retiros
+
+        // Generar código único para el retiro
+        const codigo = 'RET-' + Date.now();
+        const fecha = new Date().toISOString().split('T')[0];
+        const hora = new Date().toTimeString().split(' ')[0];
+
+        // Insertar movimiento de retiro
+        const [result] = await pool.execute(
+            `INSERT INTO movimientos 
+       (codigo, fecha, hora, id_servicio, monto, medio_pago, numero_caja, id_usuario, id_aperturas_cierres)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                codigo,
+                fecha,
+                hora,
+                id_servicio, // ID válido que existe en servicios
+                -Math.abs(monto), // Valor NEGATIVO
+                'Retiro de efectivo',
+                numero_caja,
+                id_usuario,
+                id_aperturas_cierres
+            ]
+        );
+
+        // Preparar datos para impresión (en lugar de imprimir directamente)
+        const datosImpresion = {
+            codigo,
+            fecha,
+            hora,
+            monto: Math.abs(monto), // Mostrar valor positivo en el ticket
+            nombre_usuario: nombre_autorizador,  // Usuario que autoriza (admin/recaudador)
+            nombre_caja,
+            motivo: motivo || 'Retiro de efectivo',
+            nombre_cajero: nombre_cajero || 'Cajero'  // Nombre del cajero que realiza la operación
+        };
+
+        res.json({
+            success: true,
+            message: 'Retiro registrado exitosamente',
+            insertId: result.insertId,
+            datosImpresion: datosImpresion, // Devolvemos los datos para impresión
+            retiro: {
+                id: result.insertId,
+                codigo,
+                fecha,
+                hora,
+                monto: -Math.abs(monto),
+                medio_pago: 'Retiro de efectivo',
+                id_servicio: id_servicio
+            }
+        });
+
+    } catch (error) {
+        console.error('Error al registrar retiro:', error);
+        res.status(500).json({ success: false, message: 'Error interno del servidor' });
+    }
+};

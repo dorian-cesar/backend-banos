@@ -14,6 +14,7 @@ router.post('/', aperturasCierresMantenedor.createAperturaCierre);
 //cajas
 router.post('/abrir', aperturasCierresCajas.abrirCaja);
 router.post('/cerrar', aperturasCierresCajas.cerrarCaja);
+router.post('/retiro', aperturasCierresCajas.registrarRetiro)
 
 //PUT
 router.put('/:id', aperturasCierresMantenedor.updateAperturaCierre);
