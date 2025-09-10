@@ -11,7 +11,10 @@ router.get('/', movimientosMantenedor.getAllMovimientos);
 router.get('/:id', movimientosMantenedor.getMovimientoById);
 
 //POST
+//mantenedor
 router.post('/', movimientosMantenedor.createMovimiento);
+//cajas
+// router.post('/registrar', movimientosMantenedor.registrarMovimiento);
 
 //PUT
 router.put('/:id', movimientosMantenedor.updateMovimiento);

@@ -194,7 +194,9 @@ exports.cerrarCaja = async (req, res) => {
                 balance_final,
                 fecha_cierre,
                 hora_cierre,
-                nombre_cajero: nombre_cajero || 'Cajero'
+                nombre_cajero: nombre_cajero || 'Cajero',
+                nombre_usuario_cierre: nombre_usuario_cierre,
+                nombre_caja: nombre_caja
             },
         });
     } catch (err) {
