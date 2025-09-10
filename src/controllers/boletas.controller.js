@@ -180,7 +180,6 @@ exports.solicitarNuevosFolios = async (req, res) => {
 };
 
 // Funciones auxiliares
-
 // Envío de email
 async function enviarAlertaCorreo(totalFoliosRestantes) {
   try {
@@ -294,20 +293,20 @@ async function obtenerSiguienteFolio() {
       `CAF seleccionado: ${cafSeleccionado} | Folio: ${siguienteFolio} | Folios Restantes: ${totalFoliosRestantes}`
     );
     CAF_PATH = CAF_PATH_local;
-    return {
-      folioAsignado: siguienteFolio,
-      CAF_PATH: CAF_PATH_local,
-      cafSeleccionado,
-      totalFoliosRestantes,
-    };
-
-    // prueba boleta ficticia
     // return {
-    //   folioAsignado: null,
+    //   folioAsignado: siguienteFolio,
     //   CAF_PATH: CAF_PATH_local,
     //   cafSeleccionado,
     //   totalFoliosRestantes,
     // };
+
+    // prueba boleta ficticia
+    return {
+      folioAsignado: null,
+      CAF_PATH: CAF_PATH_local,
+      cafSeleccionado,
+      totalFoliosRestantes,
+    };
   } catch (error) {
     console.error("Error en obtenerSiguienteFolio:", error);
     return { folioAsignado: null, CAF_PATH: null, totalFoliosRestantes: 0 };
