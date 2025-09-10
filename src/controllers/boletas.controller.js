@@ -293,8 +293,8 @@ async function obtenerSiguienteFolio() {
       `CAF seleccionado: ${cafSeleccionado} | Folio: ${siguienteFolio} | Folios Restantes: ${totalFoliosRestantes}`
     );
     CAF_PATH = CAF_PATH_local;
-    
-    // FLUJO REAL PARA BOLETA ELECTRÓNICA
+
+    // FLUJO PARA BOLETA ELECTRÓNICA (SIMPLE API)
     // return {
     //   folioAsignado: siguienteFolio,
     //   CAF_PATH: CAF_PATH_local,
@@ -302,7 +302,7 @@ async function obtenerSiguienteFolio() {
     //   totalFoliosRestantes,
     // };
 
-    // prueba boleta ficticia
+    // FLUJO PARA BOLETA FICTICIA
     return {
       folioAsignado: null,
       CAF_PATH: CAF_PATH_local,
@@ -366,12 +366,13 @@ exports.emitirBoleta = async (req, res) => {
 
     // --- CASO: No hay folio disponible → boleta ficticia ---
     if (!folioAsignado) {
-      const folioFicticio = Math.floor(Math.random() * 10000000) + 7000000;
+      const folioFicticio = Math.floor(Math.random() * 900000) + 100000; // 6 dígitos
       console.log("No hay folios disponibles. Boleta ficticia:", folioFicticio);
 
       await db.query(
-        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta) VALUES (NULL, ?, ?, ?, ?, ?, ?, 1, FALSE)`,
-        [nombre, precio, fechaChile, "FICTICIA", null, null, null]
+        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE)`,
+        [folioFicticio, nombre, precio, fechaChile, "FICTICIA", null, null]
       );
 
       return res.status(201).json({
@@ -409,8 +410,8 @@ exports.emitirBoleta = async (req, res) => {
     });
     const dteXml = responseGen.data;
 
-    console.log("XML generado (primeras 500 chars):");
-    console.log(dteXml.substring(0, 500));
+    // console.log("XML generado (primeras 500 chars):");
+    // console.log(dteXml.substring(0, 500));
 
     // Generar Sobre de Envío
     const { FechaResolucion, NumeroResolucion } =
