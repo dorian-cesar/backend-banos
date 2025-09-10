@@ -117,7 +117,26 @@ exports.obtenerFoliosRestantes = async (req, res) => {
   try {
     const { folioAsignado, CAF_PATH, cafSeleccionado, totalFoliosRestantes } =
       await obtenerSiguienteFolio();
-    const ultimoFolio = folioAsignado ? Number(folioAsignado) - 1 : null;
+
+    // Si folioAsignado es null, buscamos el último folio usado en la BD
+    let ultimoFolio = null;
+    if (folioAsignado) {
+      ultimoFolio = Number(folioAsignado) - 1;
+    } else {
+      try {
+        const [rows] = await db.query(
+          `SELECT folio FROM boletas ORDER BY id DESC LIMIT 1`
+        );
+        if (rows.length && rows[0].folio != null) {
+          ultimoFolio = Number(rows[0].folio);
+        } else {
+          ultimoFolio = null;
+        }
+      } catch (dbErr) {
+        console.error("Error consultando último folio en BD:", dbErr);
+        ultimoFolio = null;
+      }
+    }
 
     if (!CAF_PATH) {
       return res.status(404).json({
