@@ -66,6 +66,52 @@ function crearPayload(producto, folio) {
   };
 }
 
+// --- Endpoint para obtener información de CAF_DIRECTORY ---
+exports.obtenerInfoCAF = (req, res) => {
+  try {
+    const archivos = fs.readdirSync(CAF_DIRECTORY);
+    if (!archivos.length) {
+      return res.status(404).json({
+        message: "No hay archivos CAF en el directorio.",
+        ubicacion: path.resolve(CAF_DIRECTORY),
+        totalTamañoBytes: 0,
+        archivos: [],
+      });
+    }
+    let tamañoTotal = 0;
+    const archivosConInfo = archivos.map((archivo) => {
+      const rutaArchivo = path.join(CAF_DIRECTORY, archivo);
+      const stats = fs.statSync(rutaArchivo);
+      tamañoTotal += stats.size;
+      const fechaCreacionLegible = stats.birthtime.toLocaleString("es-CL", {
+        timeZone: "America/Santiago",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      return {
+        nombre: archivo,
+        tamañoBytes: stats.size,
+        rutaCompleta: rutaArchivo,
+        fechaCreacion: fechaCreacionLegible,
+      };
+    });
+    res.status(200).json({
+      ubicacion: path.resolve(CAF_DIRECTORY),
+      totalTamañoBytes: tamañoTotal,
+      archivos: archivosConInfo,
+    });
+  } catch (error) {
+    console.error("Error leyendo CAF_DIRECTORY:", error);
+    res
+      .status(500)
+      .json({ error: "No se pudo leer el directorio CAF: " + error.message });
+  }
+};
+
 // --- Endpoint consultar folios restantes ---
 exports.obtenerFoliosRestantes = async (req, res) => {
   try {
