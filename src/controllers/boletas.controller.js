@@ -293,6 +293,8 @@ async function obtenerSiguienteFolio() {
       `CAF seleccionado: ${cafSeleccionado} | Folio: ${siguienteFolio} | Folios Restantes: ${totalFoliosRestantes}`
     );
     CAF_PATH = CAF_PATH_local;
+    
+    // FLUJO REAL PARA BOLETA ELECTRÓNICA
     // return {
     //   folioAsignado: siguienteFolio,
     //   CAF_PATH: CAF_PATH_local,
