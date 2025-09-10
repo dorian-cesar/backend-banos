@@ -1,11 +1,24 @@
 const express = require('express');
 const router = express.Router();
-const movimientosController = require('../controllers/movimientos.controller');
+const movimientosMantenedor = require('../controllers/mantenedor/movimientos.controller');
+const movimientosCaja = require('../controllers/cajas/movimientos.controller');
 
-router.get('/', movimientosController.getAllMovimientos);
-router.get('/:id', movimientosController.getMovimientoById);
-router.post('/', movimientosController.createMovimiento);
-router.put('/:id', movimientosController.updateMovimiento);
-router.delete('/:id', movimientosController.deleteMovimiento);
+//GET
+//cajas
+router.get('/por-caja', movimientosCaja.listarMovimientosPorCaja)
+//mantenedor
+router.get('/', movimientosMantenedor.getAllMovimientos);
+router.get('/:id', movimientosMantenedor.getMovimientoById);
+
+//POST
+router.post('/', movimientosMantenedor.createMovimiento);
+
+//PUT
+router.put('/:id', movimientosMantenedor.updateMovimiento);
+
+//DELETE
+router.delete('/:id', movimientosMantenedor.deleteMovimiento);
+
+
 
 module.exports = router;

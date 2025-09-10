@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const cajasController = require('../controllers/cajas.controller');
+const cajasController = require('../controllers/mantenedor/cajas.controller');
 
 router.get('/', cajasController.getAllCajas);
 router.get('/:id', cajasController.getCajaById);

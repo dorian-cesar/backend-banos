@@ -1,4 +1,4 @@
-const db = require('../config/db.config');
+const db = require('../../config/db.config');
 
 // Obtener todas las cajas
 exports.getAllCajas = async (req, res) => {

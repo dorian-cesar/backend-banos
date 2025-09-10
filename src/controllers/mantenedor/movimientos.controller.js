@@ -1,4 +1,4 @@
-const db = require('../config/db.config');
+const db = require('../../config/db.config');
 
 async function existsInTable(table, column, value) {
     const [rows] = await db.query(`SELECT 1 FROM ?? WHERE ?? = ? LIMIT 1`, [table, column, value]);

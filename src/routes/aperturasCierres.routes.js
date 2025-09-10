@@ -1,11 +1,24 @@
 const express = require('express');
 const router = express.Router();
-const aperturasCierresController = require('../controllers/aperturasCierres.controller');
+const aperturasCierresMantenedor = require('../controllers/mantenedor/aperturasCierres.controller');
+const aperturasCierresCajas = require('../controllers/cajas/aperturasCierres.controller');
 
-router.get('/', aperturasCierresController.getAllAperturasCierres);
-router.get('/:id', aperturasCierresController.getAperturaCierreById);
-router.post('/', aperturasCierresController.createAperturaCierre);
-router.put('/:id', aperturasCierresController.updateAperturaCierre);
-router.delete('/:id', aperturasCierresController.deleteAperturaCierre);
+//GET
+router.get('/', aperturasCierresMantenedor.getAllAperturasCierres);
+router.get('/:id', aperturasCierresMantenedor.getAperturaCierreById);
+
+//POST
+//mantenedor
+router.post('/', aperturasCierresMantenedor.createAperturaCierre);
+
+//cajas
+router.post('/abrir', aperturasCierresCajas.abrirCaja);
+router.post('/cerrar', aperturasCierresCajas.cerrarCaja);
+
+//PUT
+router.put('/:id', aperturasCierresMantenedor.updateAperturaCierre);
+
+//DELETE
+router.delete('/:id', aperturasCierresMantenedor.deleteAperturaCierre);
 
 module.exports = router;

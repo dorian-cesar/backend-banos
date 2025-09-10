@@ -1,4 +1,4 @@
-const db = require('../config/db.config');
+const db = require('../../config/db.config');
 const bcrypt = require('bcrypt');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

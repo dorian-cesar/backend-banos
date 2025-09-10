@@ -1,4 +1,4 @@
-const db = require('../config/db.config');
+const db = require('../../config/db.config');
 
 // Obtener todas las aperturas/cierres
 exports.getAllAperturasCierres = async (req, res) => {

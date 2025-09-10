@@ -1,4 +1,4 @@
-const db = require('../config/db.config');
+const db = require('../../config/db.config');
 
 // Obtener todos los servicios
 exports.getAllServicios = async (req, res) => {
