@@ -674,7 +674,6 @@ exports.emitirLoteBoletas = async (req, res) => {
       .json({ error: "Faltan datos válidos numéricos para generar el lote" });
   }
 
-  // Validar coherencia del monto
   if (precio * cantidad !== monto_total) {
     return res.status(400).json({
       error: "El monto_total no coincide con precio * cantidad",
@@ -722,7 +721,7 @@ exports.emitirLoteBoletas = async (req, res) => {
     const productoLote = { nombre, precio: monto_total };
     const payload = crearPayload(productoLote, folioAsignado);
 
-    // Generar DTE en API externa
+    // Generar DTE
     const formGen = new FormData();
     formGen.append("files", fs.createReadStream(CERT_PATH));
     formGen.append("files2", fs.createReadStream(CAF_PATH));
@@ -757,9 +756,7 @@ exports.emitirLoteBoletas = async (req, res) => {
     const responseSobre = await axios.post(
       `${API_URL}/envio/generar`,
       formSobre,
-      {
-        headers: { Authorization: API_KEY, ...formSobre.getHeaders() },
-      }
+      { headers: { Authorization: API_KEY, ...formSobre.getHeaders() } }
     );
     const sobreXml = responseSobre.data;
 
@@ -816,33 +813,55 @@ exports.emitirLoteBoletas = async (req, res) => {
       });
     }
 
-    // Guardar N boletas hijas con el mismo folio_padre
+    // --- Verificar alerta por folios bajos ---
+    const [ultimaBoleta] = await db.query(
+      `SELECT alerta FROM boletas ORDER BY id DESC LIMIT 1`
+    );
+    const alertaAnterior = ultimaBoleta[0]?.alerta;
+    let alertaActual = false;
+
+    if (totalFoliosRestantes < ALERTA_MIN_FOLIOS) {
+      if (!alertaAnterior) {
+        console.log("Enviando alerta de folios bajos...");
+        await enviarAlertaCorreo(totalFoliosRestantes);
+        alertaActual = true;
+      } else {
+        alertaActual = true; // mantener continuidad de alerta
+      }
+    }
+
+    // --- Guardar N boletas hijas ---
     for (let i = 0; i < cantidad; i++) {
       await db.query(
         `INSERT INTO boletas 
           (folio, folio_padre, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, FALSE, ?, ?)`,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
         [
-          `${folioAsignado}-${i + 1}`, // identificador interno
-          folioAsignado, // folio real en SII
+          `${folioAsignado}-${i + 1}`,
+          folioAsignado,
           nombre,
           precio,
           fechaChile,
           estado,
           xmlBase64,
           trackId,
+          alertaActual,
           monto_total,
           cantidad,
         ]
       );
     }
 
-    return res.status(201).json({
+    res.status(201).json({
       message: "Lote de boletas generado correctamente",
       folio_padre: folioAsignado,
       cantidad,
       monto_total,
       ficticia: false,
+      alerta:
+        totalFoliosRestantes <= ALERTA_MIN_FOLIOS
+          ? `Quedan solo ${totalFoliosRestantes} folios disponibles`
+          : null,
     });
   } catch (err) {
     console.error("Error en flujo lote:", err.response?.data || err.message);
