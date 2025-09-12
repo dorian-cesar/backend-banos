@@ -441,8 +441,7 @@ exports.emitirBoleta = async (req, res) => {
       );
 
       return res.status(201).json({
-        message:
-          "No hay folios disponibles. Se generó una boleta ficticia.",
+        message: "No hay folios disponibles. Se generó una boleta ficticia.",
         folio: folioFicticio,
         ficticia: true,
       });
@@ -656,6 +655,197 @@ exports.emitirBoleta = async (req, res) => {
     });
   } catch (err) {
     console.error("Error en flujo boleta:", err.response?.data || err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+};
+
+// ----- Endpoint: emitir un lote de boletas con 1 solo folio en el SII -----
+exports.emitirLoteBoletas = async (req, res) => {
+  let { nombre, precio, cantidad, monto_total } = req.body;
+
+  // Asegurar que sean números
+  precio = Number(precio);
+  cantidad = Number(cantidad);
+  monto_total = Number(monto_total);
+
+  if (!nombre || isNaN(precio) || isNaN(cantidad) || isNaN(monto_total)) {
+    return res
+      .status(400)
+      .json({ error: "Faltan datos válidos numéricos para generar el lote" });
+  }
+
+  // Validar coherencia del monto
+  if (precio * cantidad !== monto_total) {
+    return res.status(400).json({
+      error: "El monto_total no coincide con precio * cantidad",
+    });
+  }
+
+  try {
+    const { folioAsignado, CAF_PATH, totalFoliosRestantes } =
+      await obtenerSiguienteFolio();
+
+    // --- CASO: No hay folio disponible → generar lote ficticio ---
+    if (!folioAsignado) {
+      const folioFicticioPadre = Math.floor(Math.random() * 900000) + 100000;
+
+      for (let i = 0; i < cantidad; i++) {
+        await db.query(
+          `INSERT INTO boletas 
+            (folio, folio_padre, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
+          [
+            `${folioFicticioPadre}-${i + 1}`,
+            folioFicticioPadre,
+            nombre,
+            precio,
+            fechaChile,
+            "FICTICIA",
+            null,
+            null,
+            monto_total,
+            cantidad,
+          ]
+        );
+      }
+
+      return res.status(201).json({
+        message: "No hay folios disponibles. Se generó un lote ficticio.",
+        folio_padre: folioFicticioPadre,
+        cantidad,
+        monto_total,
+        ficticia: true,
+      });
+    }
+
+    // --- Caso normal: emitir boletas reales ---
+    const productoLote = { nombre, precio: monto_total };
+    const payload = crearPayload(productoLote, folioAsignado);
+
+    // Generar DTE en API externa
+    const formGen = new FormData();
+    formGen.append("files", fs.createReadStream(CERT_PATH));
+    formGen.append("files2", fs.createReadStream(CAF_PATH));
+    formGen.append("input", JSON.stringify(payload));
+
+    const responseGen = await axios.post(`${API_URL}/dte/generar`, formGen, {
+      headers: { Authorization: API_KEY, ...formGen.getHeaders() },
+    });
+    const dteXml = responseGen.data;
+
+    // Generar Sobre
+    const { FechaResolucion, NumeroResolucion } =
+      obtenerDatosResolucion(CAF_PATH);
+    const formSobre = new FormData();
+    formSobre.append(
+      "input",
+      JSON.stringify({
+        Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
+        Caratula: {
+          RutEmisor: `${EMISOR_RUT}-${EMISOR_DV}`,
+          RutReceptor: "60803000-K",
+          FechaResolucion,
+          NumeroResolucion,
+        },
+      })
+    );
+    formSobre.append("files", fs.createReadStream(CERT_PATH));
+    formSobre.append("files", Buffer.from(dteXml, "utf-8"), {
+      filename: `dte_${folioAsignado}.xml`,
+    });
+
+    const responseSobre = await axios.post(
+      `${API_URL}/envio/generar`,
+      formSobre,
+      {
+        headers: { Authorization: API_KEY, ...formSobre.getHeaders() },
+      }
+    );
+    const sobreXml = responseSobre.data;
+
+    // Enviar al SII
+    const formEnvio = new FormData();
+    formEnvio.append("files", fs.createReadStream(CERT_PATH));
+    formEnvio.append("files2", Buffer.from(sobreXml, "utf-8"), {
+      filename: `sobre_${folioAsignado}.xml`,
+    });
+    formEnvio.append(
+      "input",
+      JSON.stringify({
+        Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
+        Ambiente: 1,
+        Tipo: 2,
+      })
+    );
+
+    const responseEnvio = await axios.post(
+      `${API_URL}/envio/enviar`,
+      formEnvio,
+      {
+        headers: { Authorization: API_KEY, ...formEnvio.getHeaders() },
+      }
+    );
+    const trackId = responseEnvio.data?.trackId;
+
+    // Consultar estado en SII
+    const formConsulta = new FormData();
+    formConsulta.append("files", fs.createReadStream(CERT_PATH));
+    formConsulta.append(
+      "input",
+      JSON.stringify({
+        Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
+        RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
+        TrackId: trackId,
+        Ambiente: 1,
+        ServidorBoletaREST: 1,
+      })
+    );
+
+    const responseConsulta = await axios.post(
+      `${API_URL}/consulta/envio`,
+      formConsulta,
+      { headers: { Authorization: API_KEY, ...formConsulta.getHeaders() } }
+    );
+    const estado = responseConsulta.data?.estado;
+    const estadosValidos = ["ACE", "EPR", "REC", "SOK", "DOK"];
+    const xmlBase64 = Buffer.from(dteXml, "utf-8").toString("base64");
+
+    if (!estadosValidos.includes(estado)) {
+      return res.status(400).json({
+        error: `El SII rechazó el lote. Estado: ${estado || "desconocido"}`,
+      });
+    }
+
+    // Guardar N boletas hijas con el mismo folio_padre
+    for (let i = 0; i < cantidad; i++) {
+      await db.query(
+        `INSERT INTO boletas 
+          (folio, folio_padre, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, FALSE, ?, ?)`,
+        [
+          `${folioAsignado}-${i + 1}`, // identificador interno
+          folioAsignado, // folio real en SII
+          nombre,
+          precio,
+          fechaChile,
+          estado,
+          xmlBase64,
+          trackId,
+          monto_total,
+          cantidad,
+        ]
+      );
+    }
+
+    return res.status(201).json({
+      message: "Lote de boletas generado correctamente",
+      folio_padre: folioAsignado,
+      cantidad,
+      monto_total,
+      ficticia: false,
+    });
+  } catch (err) {
+    console.error("Error en flujo lote:", err.response?.data || err.message);
     if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 };
