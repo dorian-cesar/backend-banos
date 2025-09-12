@@ -117,17 +117,17 @@ exports.cerrarCaja = async (req, res) => {
         // Obtener totales desde la tabla movimientos CONSIDERANDO RETIROS
         const [[totales]] = await pool.execute(
             `SELECT 
-           SUM(CASE WHEN medio_pago = 'EFECTIVO' AND id_servicio != 999 THEN monto ELSE 0 END) AS total_efectivo,
-           SUM(CASE WHEN medio_pago = 'TARJETA' THEN monto ELSE 0 END) AS total_tarjeta,
-           SUM(CASE WHEN id_servicio = 999 THEN monto ELSE 0 END) AS total_retiros
-         FROM movimientos
-         WHERE id_aperturas_cierres = ?`,
+         SUM(CASE WHEN medio_pago = 'EFECTIVO' AND id_servicio != 999 THEN monto ELSE 0 END) AS total_efectivo,
+         SUM(CASE WHEN medio_pago = 'TARJETA' THEN monto ELSE 0 END) AS total_tarjeta,
+         SUM(CASE WHEN id_servicio = 999 THEN monto ELSE 0 END) AS total_retiros
+       FROM movimientos
+       WHERE id_aperturas_cierres = ?`,
             [id_aperturas_cierres]
         );
 
         const total_efectivo = totales.total_efectivo || 0;
         const total_tarjeta = totales.total_tarjeta || 0;
-        const total_retiros = Math.abs(totales.total_retiros) || 0; // Convertir a positivo
+        const total_retiros = Math.abs(totales.total_retiros) || 0;
 
         const now = new Date();
         const fecha_cierre = now.toISOString().split('T')[0];
@@ -136,9 +136,9 @@ exports.cerrarCaja = async (req, res) => {
         // Obtener monto inicial y datos de la caja
         const [[aperturaInfo]] = await pool.execute(
             `SELECT a.monto_inicial, a.numero_caja, c.nombre as nombre_caja 
-        FROM aperturas_cierres a
-        LEFT JOIN cajas c ON a.numero_caja = c.numero_caja
-        WHERE a.id = ?`,
+       FROM aperturas_cierres a
+       LEFT JOIN cajas c ON a.numero_caja = c.numero_caja
+       WHERE a.id = ?`,
             [id_aperturas_cierres]
         );
 
@@ -146,7 +146,7 @@ exports.cerrarCaja = async (req, res) => {
         const numero_caja = aperturaInfo.numero_caja;
         const nombre_caja = aperturaInfo.nombre_caja || `Caja ${numero_caja}`;
 
-        // Obtener nombre del usuario que cierra (admin/supervisor)
+        // Obtener nombre del usuario que cierra
         const [[usuarioInfo]] = await pool.execute(
             `SELECT username FROM users WHERE id = ?`,
             [id_usuario_cierre]
@@ -154,10 +154,10 @@ exports.cerrarCaja = async (req, res) => {
 
         const nombre_usuario_cierre = usuarioInfo.username;
 
-        // Calcular balance final (monto inicial + efectivo - retiros)
+        // Calcular balance final
         const balance_final = Number(monto_inicial) + Number(total_efectivo) - Number(total_retiros);
 
-        // Actualizar la sesión con los nuevos campos
+        // Actualizar la sesión
         await pool.execute(
             `UPDATE aperturas_cierres
          SET estado = 'cerrada',
@@ -169,7 +169,7 @@ exports.cerrarCaja = async (req, res) => {
              total_retiros = ?,
              balance_final = ?,
              observaciones = ?
-         WHERE id = ?`,
+       WHERE id = ?`,
             [
                 fecha_cierre,
                 hora_cierre,
@@ -183,20 +183,25 @@ exports.cerrarCaja = async (req, res) => {
             ]
         );
 
+        // 🔹 Preparar datosImpresion para consistencia con retiros
+        const datosImpresion = {
+            monto_inicial,
+            total_efectivo,
+            total_tarjeta,
+            total_retiros,
+            balance_final,
+            fecha_cierre,
+            hora_cierre,
+            nombre_cajero: nombre_cajero || 'Cajero',
+            nombre_usuario_cierre,
+            nombre_caja
+        };
+
         res.json({
             success: true,
             mensaje: 'Caja cerrada correctamente.',
             data: {
-                monto_inicial,
-                total_efectivo,
-                total_tarjeta,
-                total_retiros,
-                balance_final,
-                fecha_cierre,
-                hora_cierre,
-                nombre_cajero: nombre_cajero || 'Cajero',
-                nombre_usuario_cierre: nombre_usuario_cierre,
-                nombre_caja: nombre_caja
+                datosImpresion
             },
         });
     } catch (err) {
