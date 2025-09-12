@@ -442,7 +442,7 @@ exports.emitirBoleta = async (req, res) => {
 
       return res.status(201).json({
         message:
-          "No hay folios disponibles. Se generó una boleta ficticia para pruebas.",
+          "No hay folios disponibles. Se generó una boleta ficticia.",
         folio: folioFicticio,
         ficticia: true,
       });
