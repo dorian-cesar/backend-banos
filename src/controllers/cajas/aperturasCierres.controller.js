@@ -1,4 +1,5 @@
 const pool = require('../../config/db.config');
+const { nowCL } = require('../../helpers/dateChile');
 
 exports.abrirCaja = async (req, res) => {
     const { numero_caja, monto_inicial, observaciones, id_usuario_apertura } = req.body;
@@ -25,8 +26,7 @@ exports.abrirCaja = async (req, res) => {
         });
     }
 
-    const fecha = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const hora = new Date().toTimeString().slice(0, 8);   // HH:MM:SS
+    const { fecha, hora } = nowCL();
 
     try {
         // Validar que la caja exista y esté activa
@@ -129,9 +129,7 @@ exports.cerrarCaja = async (req, res) => {
         const total_tarjeta = totales.total_tarjeta || 0;
         const total_retiros = Math.abs(totales.total_retiros) || 0;
 
-        const now = new Date();
-        const fecha_cierre = now.toISOString().split('T')[0];
-        const hora_cierre = now.toTimeString().split(':').slice(0, 2).join(':');
+        const { fecha: fecha_cierre, hora: hora_cierre } = nowCL();
 
         // Obtener monto inicial y datos de la caja
         const [[aperturaInfo]] = await pool.execute(
@@ -263,8 +261,7 @@ exports.registrarRetiro = async (req, res) => {
 
         // Generar código único para el retiro
         const codigo = 'RET-' + Date.now();
-        const fecha = new Date().toISOString().split('T')[0];
-        const hora = new Date().toTimeString().split(' ')[0];
+        const { fecha, hora } = nowCL();
 
         // Insertar movimiento de retiro
         const [result] = await pool.execute(
