@@ -32,9 +32,9 @@ function crearPayload(producto, folio) {
         Emisor: {
           Rut: `${EMISOR_RUT}-${EMISOR_DV}`,
           RazonSocialBoleta: "COMERCIAL, INVERSIONES Y SERVICIOS SANTIAGO SPA",
-          GiroBoleta: "ALQUILER DE VEHICULOS AUTOMOTORES SIN CHOFER",
-          DireccionOrigen:
-            "SAN BORJA #231 COMUNA ESTACION CENTRAL CIUDAD SANTIAGO",
+          GiroBoleta:
+            "ALQUILER DE VEHICULOS AUTOMOTORES, COMPRA VENTA Y MANTENCION DE VEHICU",
+          DireccionOrigen: "SAN BORJA 231",
           ComunaOrigen: "ESTACION CENTRAL",
         },
         Receptor: {
@@ -635,7 +635,7 @@ exports.emitirBoleta = async (req, res) => {
         }
       } catch (err) {
         console.error(
-          "Error en flujo asíncrono de boleta:",
+          "Error en flujo de boleta:",
           err.response?.data || err.message
         );
       }
@@ -846,7 +846,7 @@ exports.emitirLoteBoletas = async (req, res) => {
         }
       } catch (err) {
         console.error(
-          "Error en flujo asíncrono del lote:",
+          "Error en flujo del lote:",
           err.response?.data || err.message
         );
       }
