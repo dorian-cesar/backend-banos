@@ -31,9 +31,10 @@ function crearPayload(producto, folio) {
         },
         Emisor: {
           Rut: `${EMISOR_RUT}-${EMISOR_DV}`,
-          RazonSocialBoleta: "INMOBILIARIA E INVERSIONES P Y R S.A.",
-          GiroBoleta: "OBRAS MENORES EN CONSTRUCCIÓN",
-          DireccionOrigen: "SAN BORJA N1251",
+          RazonSocialBoleta: "COMERCIAL, INVERSIONES Y SERVICIOS SANTIAGO SPA",
+          GiroBoleta: "ALQUILER DE VEHICULOS AUTOMOTORES SIN CHOFER",
+          DireccionOrigen:
+            "SAN BORJA #231 COMUNA ESTACION CENTRAL CIUDAD SANTIAGO",
           ComunaOrigen: "ESTACION CENTRAL",
         },
         Receptor: {
@@ -195,7 +196,7 @@ exports.solicitarNuevosFolios = async (req, res) => {
         RutCertificado: process.env.CERT_RUT,
         Password: CERT_PASS,
         RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
-        Ambiente: 1,
+        Ambiente: 0,
       })
     );
     data.append("files", fs.createReadStream(CERT_PATH));
@@ -274,8 +275,11 @@ async function enviarAlertaCorreo(totalFoliosRestantes) {
 async function obtenerSiguienteFolio() {
   try {
     // --- Obtener último folio CON CONVERSIÓN A NÚMERO ---
+    // const [rows] = await db.query(
+    //   `SELECT MAX(folio) as ultimo FROM boletas WHERE (ficticia IS NULL OR ficticia = 0) AND (estado_sii IS NULL OR estado_sii != 'RSC') AND folio NOT REGEXP '-[0-9]+$'`
+    // );
     const [rows] = await db.query(
-      `SELECT MAX(folio) as ultimo FROM boletas WHERE (ficticia IS NULL OR ficticia = 0) AND (estado_sii IS NULL OR estado_sii != 'RSC') AND folio NOT REGEXP '-[0-9]+$'`
+      `SELECT MAX(folio) as ultimo FROM boletas WHERE (ficticia IS NULL OR ficticia = 0) AND folio NOT REGEXP '-[0-9]+$'`
     );
     // Conversión explícita a número
     const ultimoFolio = Number(rows[0]?.ultimo) || 0;
@@ -360,20 +364,20 @@ async function obtenerSiguienteFolio() {
     CAF_PATH = CAF_PATH_local;
 
     // FLUJO PARA BOLETA ELECTRÓNICA (SIMPLE API)
-    // return {
-    //   folioAsignado: siguienteFolio,
-    //   CAF_PATH: CAF_PATH_local,
-    //   cafSeleccionado,
-    //   totalFoliosRestantes,
-    // };
-
-    // FLUJO PARA BOLETA FICTICIA
     return {
-      folioAsignado: null,
+      folioAsignado: siguienteFolio,
       CAF_PATH: CAF_PATH_local,
       cafSeleccionado,
       totalFoliosRestantes,
     };
+
+    // FLUJO PARA BOLETA FICTICIA
+    // return {
+    //   folioAsignado: null,
+    //   CAF_PATH: CAF_PATH_local,
+    //   cafSeleccionado,
+    //   totalFoliosRestantes,
+    // };
   } catch (error) {
     console.error("Error en obtenerSiguienteFolio:", error);
     return { folioAsignado: null, CAF_PATH: null, totalFoliosRestantes: 0 };
@@ -431,7 +435,7 @@ exports.emitirBoleta = async (req, res) => {
 
     // --- CASO: No hay folio disponible → boleta ficticia ---
     if (!folioAsignado) {
-      const folioFicticio = Math.floor(Math.random() * 900000) + 100000; // 6 dígitos
+      const folioFicticio = Math.floor(Math.random() * 90) + 10; // 2 dígitos
       console.log("No hay folios disponibles. Boleta ficticia:", folioFicticio);
 
       await db.query(
@@ -527,7 +531,7 @@ exports.emitirBoleta = async (req, res) => {
           "input",
           JSON.stringify({
             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-            Ambiente: 1,
+            Ambiente: 0,
             Tipo: 2,
           })
         );
@@ -553,7 +557,7 @@ exports.emitirBoleta = async (req, res) => {
             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
             RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
             TrackId: trackId,
-            Ambiente: 1,
+            Ambiente: 0,
             ServidorBoletaREST: 1,
           })
         );
@@ -668,7 +672,7 @@ exports.emitirLoteBoletas = async (req, res) => {
 
     // --- CASO: No hay folio disponible → generar lote ficticio ---
     if (!folioAsignado) {
-      const folioFicticioPadre = Math.floor(Math.random() * 900000) + 100000;
+      const folioFicticioPadre = Math.floor(Math.random() * 90) + 10;
 
       for (let i = 0; i < cantidad; i++) {
         await db.query(
@@ -767,7 +771,7 @@ exports.emitirLoteBoletas = async (req, res) => {
           "input",
           JSON.stringify({
             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-            Ambiente: 1,
+            Ambiente: 0,
             Tipo: 2,
           })
         );
@@ -788,7 +792,7 @@ exports.emitirLoteBoletas = async (req, res) => {
             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
             RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
             TrackId: trackId,
-            Ambiente: 1,
+            Ambiente: 0,
             ServidorBoletaREST: 1,
           })
         );
@@ -850,5 +854,18 @@ exports.emitirLoteBoletas = async (req, res) => {
   } catch (err) {
     console.error("Error en flujo lote:", err.response?.data || err.message);
     if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+};
+
+exports.borrarTodasLasBoletas = async (req, res) => {
+  try {
+    const [result] = await db.query("DELETE FROM boletas");
+
+    res.status(200).json({
+      message: `Se eliminaron ${result.affectedRows} boletas`,
+    });
+  } catch (error) {
+    console.error("Error al borrar todas las boletas:", error);
+    res.status(500).json({ error: "Error al borrar todas las boletas" });
   }
 };

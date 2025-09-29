@@ -7,5 +7,6 @@ router.get("/info-caf", boletasController.obtenerInfoCAF);
 router.post("/enviar", boletasController.emitirBoleta);
 router.post("/enviar-lote", boletasController.emitirLoteBoletas);
 router.post("/solicitar-folios", boletasController.solicitarNuevosFolios);
+router.delete("/borrar-boletas", boletasController.borrarTodasLasBoletas);
 
 module.exports = router;
