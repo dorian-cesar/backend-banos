@@ -20,8 +20,8 @@ let CAF_PATH;
 // --- Función para crear payload según producto ---
 function crearPayload(producto, folio) {
   const precioBruto = producto.precio; // Precio final al cliente
-  const montoNeto = Math.round(precioBruto / 1.19);
-  const iva = precioBruto - montoNeto;
+  const montoNeto = Math.round(precioBruto / 1.19); // monto antes de IVA
+  const iva = precioBruto - montoNeto; // IVA calculado
 
   return {
     Documento: {
@@ -31,13 +31,11 @@ function crearPayload(producto, folio) {
           Folio: folio,
           FechaEmision: new Date().toISOString().split("T")[0],
           IndicadorServicio: 3, // ventas y servicios
-          // no se envía IndicadorMontosNetosBoleta si trabajas con bruto
         },
         Emisor: {
           Rut: `${EMISOR_RUT}-${EMISOR_DV}`,
           RazonSocialBoleta: "COMERCIAL, INVERSIONES Y SERVICIOS SANTIAGO SPA",
-          GiroBoleta:
-            "ALQUILER DE VEHICULOS AUTOMOTORES, COMPRA VENTA Y MANTENCION DE VEHICU",
+          GiroBoleta: "ALQUILER DE VEHICULOS AUTOMOTORES SIN CHOFER",
           DireccionOrigen: "SAN BORJA 231",
           ComunaOrigen: "ESTACION CENTRAL",
         },
@@ -56,11 +54,11 @@ function crearPayload(producto, folio) {
       },
       Detalles: [
         {
-          IndicadorExento: 0,
           Nombre: producto.nombre,
           Cantidad: 1,
           Precio: montoNeto,
           MontoItem: montoNeto,
+          IndicadorExento: 0,
         },
       ],
     },
