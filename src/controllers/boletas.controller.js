@@ -273,6 +273,29 @@ async function enviarAlertaCorreo(totalFoliosRestantes) {
   }
 }
 
+async function enviarAlertaCorreoSimpleAPI(peticionesRestantes) {
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    const info = await transporter.sendMail({
+      from: `"Sistema Boletas" <${process.env.SMTP_USER}>`,
+      to: "dwigodski@wit.la",
+      subject: "🚨 Alerta: peticiones disponibles bajas en SimpleAPI",
+      text: `Quedan solo ${peticionesRestantes} peticiones disponibles en tu suscripción de SimpleAPI.\nPor favor verifica tu límite y solicita renovación si es necesario.`,
+    });
+
+    console.log("Correo de alerta de peticiones enviado:", info.messageId);
+  } catch (err) {
+    console.error("Error al enviar correo de alerta:", err);
+  }
+}
+
 // --- Obtener siguiente folio revisando todos los CAF ---
 async function obtenerSiguienteFolio() {
   try {
@@ -862,28 +885,54 @@ exports.emitirLoteBoletas = async (req, res) => {
 // --- Endpoint para consultar el status de la suscripción ---
 exports.obtenerStatusSuscripcion = async (req, res) => {
   try {
-    const response = await axios.get(
-      "https://api.simpleapi.cl/api/v1/suscripcion/status",
-      {
-        headers: {
-          Authorization: API_KEY,
-        },
-        timeout: 20000, // 20s de seguridad
-      }
-    );
+    const servicios = await axios
+      .get("https://api.simpleapi.cl/api/v1/suscripcion/status", {
+        headers: { Authorization: API_KEY },
+        timeout: 20000,
+      })
+      .then((r) => r.data);
 
-    console.log("Status suscripción:", response.data);
+    if (!Array.isArray(servicios)) {
+      console.error("Respuesta de la API inválida:", servicios);
+      return res.status(500).json({
+        error: "No se pudo obtener el status de la suscripción",
+        detalle: "Respuesta de la API inválida",
+      });
+    }
+
+    const simpleAPI = servicios.find((s) => s.servicio === "SimpleAPI");
+    let emailEnviado = false;
+
+    if (simpleAPI) {
+      const restante = simpleAPI.maximo - simpleAPI.uso;
+      const porcentajeRestante = (restante / simpleAPI.maximo) * 100;
+
+      console.log(
+        `SimpleAPI restante: ${restante}, porcentaje: ${porcentajeRestante.toFixed(
+          2
+        )}%`
+      );
+
+      if (porcentajeRestante <= 15) {
+        console.log("Alerta: Quedan menos del 15% de peticiones en SimpleAPI");
+        await enviarAlertaCorreoSimpleAPI(restante);
+        emailEnviado = true;
+      }
+    }
 
     return res.status(200).json({
       message: "Status de suscripción obtenido correctamente",
-      data: response.data,
+      data: simpleAPI,
+      porcentajeRestante: simpleAPI
+        ? ((simpleAPI.maximo - simpleAPI.uso) / simpleAPI.maximo).toFixed(2)
+        : null,
+      emailEnviado,
     });
   } catch (error) {
     console.error(
       "Error al consultar status de suscripción:",
       error.response?.data || error.message
     );
-
     return res.status(500).json({
       error: "No se pudo obtener el status de la suscripción",
       detalle: error.response?.data || error.message,
