@@ -19,6 +19,10 @@ let CAF_PATH;
 
 // --- Función para crear payload según producto ---
 function crearPayload(producto, folio) {
+  const precioBruto = producto.precio; // Precio final al cliente
+  const montoNeto = Math.round(precioBruto / 1.19);
+  const iva = precioBruto - montoNeto;
+
   return {
     Documento: {
       Encabezado: {
@@ -26,8 +30,8 @@ function crearPayload(producto, folio) {
           TipoDTE: 39, // Boleta electrónica
           Folio: folio,
           FechaEmision: new Date().toISOString().split("T")[0],
-          IndicadorServicio: 3,
-          IndicadorMontosNetosBoleta: 2,
+          IndicadorServicio: 3, // ventas y servicios
+          // no se envía IndicadorMontosNetosBoleta si trabajas con bruto
         },
         Emisor: {
           Rut: `${EMISOR_RUT}-${EMISOR_DV}`,
@@ -38,15 +42,15 @@ function crearPayload(producto, folio) {
           ComunaOrigen: "ESTACION CENTRAL",
         },
         Receptor: {
-          Rut: "66666666-6",
+          Rut: "66666666-6", // consumidor final
           RazonSocial: "Consumidor final",
           Direccion: "Sin dirección",
           Comuna: "Santiago",
         },
         Totales: {
-          MontoNeto: producto.precio,
-          IVA: Math.round(producto.precio * 0.19),
-          MontoTotal: Math.round(producto.precio * 1.19),
+          MontoNeto: montoNeto,
+          IVA: iva,
+          MontoTotal: precioBruto,
           MontoExento: 0,
         },
       },
@@ -55,14 +59,14 @@ function crearPayload(producto, folio) {
           IndicadorExento: 0,
           Nombre: producto.nombre,
           Cantidad: 1,
-          Precio: producto.precio,
-          MontoItem: producto.precio,
+          Precio: montoNeto,
+          MontoItem: montoNeto,
         },
       ],
     },
     Certificado: {
       Rut: process.env.CERT_RUT,
-      Password: CERT_PASS,
+      Password: process.env.CERT_PASS,
     },
   };
 }
