@@ -857,6 +857,38 @@ exports.emitirLoteBoletas = async (req, res) => {
   }
 };
 
+// --- Endpoint para consultar el status de la suscripción ---
+exports.obtenerStatusSuscripcion = async (req, res) => {
+  try {
+    const response = await axios.get(
+      "https://api.simpleapi.cl/api/v1/suscripcion/status",
+      {
+        headers: {
+          Authorization: API_KEY,
+        },
+        timeout: 20000, // 20s de seguridad
+      }
+    );
+
+    console.log("Status suscripción:", response.data);
+
+    return res.status(200).json({
+      message: "Status de suscripción obtenido correctamente",
+      data: response.data,
+    });
+  } catch (error) {
+    console.error(
+      "Error al consultar status de suscripción:",
+      error.response?.data || error.message
+    );
+
+    return res.status(500).json({
+      error: "No se pudo obtener el status de la suscripción",
+      detalle: error.response?.data || error.message,
+    });
+  }
+};
+
 exports.borrarTodasLasBoletas = async (req, res) => {
   try {
     const [result] = await db.query("DELETE FROM boletas");
