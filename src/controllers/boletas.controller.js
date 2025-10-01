@@ -14,7 +14,7 @@ const EMISOR_DV = process.env.EMISOR_DV;
 const CERT_PATH = __dirname + "/../../certificado/certificado.pfx";
 const CERT_PASS = process.env.CERT_PASS;
 const CAF_DIRECTORY = __dirname + "/../../caf/";
-const ALERTA_MIN_FOLIOS = 10000;
+const ALERTA_MIN_FOLIOS = 100;
 let CAF_PATH;
 
 // --- Función para crear payload según producto ---
@@ -34,9 +34,10 @@ function crearPayload(producto, folio) {
         },
         Emisor: {
           Rut: `${EMISOR_RUT}-${EMISOR_DV}`,
-          RazonSocialBoleta: "COMERCIAL, INVERSIONES Y SERVICIOS SANTIAGO SPA",
-          GiroBoleta: "ALQUILER DE VEHICULOS AUTOMOTORES SIN CHOFER",
-          DireccionOrigen: "SAN BORJA 231",
+          RazonSocialBoleta: "WIT INNOVACION TECNOLOGICA SPA",
+          GiroBoleta:
+            "OTRAS ACTIVIDADES DE TECNOLOGÍA DE LA INFORMACIÓN Y DE SERVICIOS INFORMÁTICOS",
+          DireccionOrigen: "AVENIDA OBISPO MANUEL UMANA 633",
           ComunaOrigen: "ESTACION CENTRAL",
         },
         Receptor: {
@@ -237,7 +238,7 @@ exports.solicitarNuevosFolios = async (req, res) => {
   } catch (err) {
     console.error(
       "Error solicitando nuevos folios:",
-      err.response?.data || err.message
+      err || err.response?.data || err.message
     );
     if (!res.headersSent) {
       res
