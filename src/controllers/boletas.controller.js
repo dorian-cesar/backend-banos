@@ -901,10 +901,13 @@ exports.obtenerStatusSuscripcion = async (req, res) => {
 
     const simpleAPI = servicios.find((s) => s.servicio === "SimpleAPI");
     let emailEnviado = false;
+    let porcentajeRestante = null;
+    let peticionesRestantes = null;
 
     if (simpleAPI) {
       const restante = simpleAPI.maximo - simpleAPI.uso;
-      const porcentajeRestante = (restante / simpleAPI.maximo) * 100;
+      peticionesRestantes = restante;
+      porcentajeRestante = (restante / simpleAPI.maximo) * 100;
 
       console.log(
         `SimpleAPI restante: ${restante}, porcentaje: ${porcentajeRestante.toFixed(
@@ -922,10 +925,12 @@ exports.obtenerStatusSuscripcion = async (req, res) => {
     return res.status(200).json({
       message: "Status de suscripción obtenido correctamente",
       data: simpleAPI,
-      porcentajeRestante: simpleAPI
-        ? ((simpleAPI.maximo - simpleAPI.uso) / simpleAPI.maximo).toFixed(2)
-        : null,
-      emailEnviado,
+      peticionesRestantes,
+      porcentajeRestante:
+        porcentajeRestante !== null
+          ? `${porcentajeRestante.toFixed(2)}%`
+          : null,
+      emailAlertaEnviado: emailEnviado,
     });
   } catch (error) {
     console.error(
