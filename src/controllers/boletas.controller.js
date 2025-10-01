@@ -30,7 +30,7 @@ function crearPayload(producto, folio) {
           TipoDTE: 39, // Boleta electrónica
           Folio: folio,
           FechaEmision: new Date().toISOString().split("T")[0],
-          IndicadorServicio: 3, // ventas y servicios
+          IndicadorServicio: 3,
         },
         Emisor: {
           Rut: `${EMISOR_RUT}-${EMISOR_DV}`,
@@ -247,7 +247,6 @@ exports.solicitarNuevosFolios = async (req, res) => {
   }
 };
 
-// Funciones auxiliares
 // Envío de email
 async function enviarAlertaCorreo(totalFoliosRestantes) {
   try {
@@ -583,7 +582,7 @@ exports.emitirBoleta = async (req, res) => {
             RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
             TrackId: trackId,
             Ambiente: 0,
-            ServidorBoletaREST: 1,
+            ServidorBoletaREST: 0,
           })
         );
 
@@ -882,7 +881,7 @@ exports.emitirLoteBoletas = async (req, res) => {
   }
 };
 
-// --- Endpoint para consultar el status de la suscripción ---
+// --- Endpoint para consultar el status de la suscripción y enviar email de alerta ---
 exports.obtenerStatusSuscripcion = async (req, res) => {
   try {
     const servicios = await axios
