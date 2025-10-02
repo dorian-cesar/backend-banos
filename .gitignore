@@ -1,7 +1,6 @@
 .env
 node_modules
 cert/
-caf
 res.txt
 consulta-folios.js
 consulta-dte.js
@@ -10,5 +9,8 @@ certificado/certificado.pem
 certificado/clave.pem
 boletas.controller backup.js
 test.js
-certificado2.pfx
+certificadoalejandro.pfx
+certificadoluis.pfx
 caf copy
+certificadoluis.pem
+claveluis.pem
