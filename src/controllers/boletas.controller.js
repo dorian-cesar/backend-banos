@@ -18,11 +18,7 @@ const ALERTA_MIN_FOLIOS = 100;
 let CAF_PATH;
 
 // --- Función para crear payload según producto ---
-function crearPayload(producto, folio) {
-  const precioBruto = producto.precio; // Precio final al cliente
-  const montoNeto = Math.round(precioBruto / 1.19); // monto antes de IVA
-  const iva = precioBruto - montoNeto; // IVA calculado
-
+function crearPayload(producto, folio, cantidad = 1) {
   //   return {
   //     Documento: {
   //       Encabezado: {
@@ -70,11 +66,15 @@ function crearPayload(producto, folio) {
   //   };
   // }
 
+  const precioBruto = producto.precio; // total final
+  const montoNeto = Math.round(precioBruto / 1.19); // antes de IVA
+  const iva = precioBruto - montoNeto; // IVA del total
+
   return {
     Documento: {
       Encabezado: {
         IdentificacionDTE: {
-          TipoDTE: 39, // Boleta electrónica
+          TipoDTE: 39,
           Folio: folio,
           FechaEmision: new Date().toISOString().split("T")[0],
           IndicadorServicio: 3,
@@ -82,14 +82,14 @@ function crearPayload(producto, folio) {
         Emisor: {
           Rut: `${EMISOR_RUT}-${EMISOR_DV}`,
           RazonSocialBoleta: "INMOBILIARIA E INVERSIONES P Y R S.A.",
-          GiroBoleta: "OBRAS MENORES EN CONSTRUCCIÓN",
+          GiroBoleta: "OBRAS MENORES EN CONSTRUCCION",
           DireccionOrigen: "SAN BORJA N1251",
           ComunaOrigen: "ESTACION CENTRAL",
         },
         Receptor: {
-          Rut: "66666666-6", // consumidor final
+          Rut: "66666666-6",
           RazonSocial: "Consumidor final",
-          Direccion: "Sin dirección",
+          Direccion: "Sin direccion",
           Comuna: "Santiago",
         },
         Totales: {
@@ -102,9 +102,10 @@ function crearPayload(producto, folio) {
       Detalles: [
         {
           Nombre: producto.nombre,
-          Cantidad: 1,
-          Precio: montoNeto,
-          MontoItem: montoNeto,
+          Cantidad: cantidad,
+          Precio: precioBruto * cantidad,
+          IVA: iva,
+          MontoItem: montoNeto + iva,
           IndicadorExento: 0,
         },
       ],
@@ -349,9 +350,11 @@ async function obtenerSiguienteFolio() {
     // const [rows] = await db.query(
     //   `SELECT MAX(folio) as ultimo FROM boletas WHERE (ficticia IS NULL OR ficticia = 0) AND (estado_sii IS NULL OR estado_sii != 'RSC') AND folio NOT REGEXP '-[0-9]+$'`
     // );
-    const [rows] = await db.query(
-      `SELECT MAX(folio) as ultimo FROM boletas WHERE (ficticia IS NULL OR ficticia = 0) AND folio NOT REGEXP '-[0-9]+$'`
-    );
+    const [rows] = await db.query(`
+      SELECT MAX(CAST(SUBSTRING_INDEX(folio, '-', 1) AS UNSIGNED)) AS ultimo
+      FROM boletas
+      WHERE (ficticia IS NULL OR ficticia = 0)
+    `);
     // Conversión explícita a número
     const ultimoFolio = Number(rows[0]?.ultimo) || 0;
     const siguienteFolio = ultimoFolio + 1;
@@ -494,229 +497,6 @@ function obtenerFechaHoraChile() {
 const fechaChile = obtenerFechaHoraChile();
 
 // --- Endpoint emitirBoleta con flujo principal ---
-// exports.emitirBoleta = async (req, res) => {
-//   const { nombre, precio } = req.body;
-//   if (!nombre || !precio)
-//     return res.status(400).json({ error: "Faltan datos del producto" });
-
-//   try {
-//     const { folioAsignado, CAF_PATH, totalFoliosRestantes } =
-//       await obtenerSiguienteFolio();
-//     console.log("CAF_PATH:", CAF_PATH);
-
-//     // --- CASO: No hay folio disponible → boleta ficticia ---
-//     if (!folioAsignado) {
-//       const folioFicticio = Math.floor(Math.random() * 90) + 10; // 2 dígitos
-//       console.log("No hay folios disponibles. Boleta ficticia:", folioFicticio);
-
-//       await db.query(
-//         `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
-//            VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE)`,
-//         [folioFicticio, nombre, precio, fechaChile, "FICTICIA", null, null]
-//       );
-
-//       return res.status(201).json({
-//         message: "No hay folios disponibles. Se generó una boleta ficticia.",
-//         folio: folioFicticio,
-//         ficticia: true,
-//       });
-//     }
-
-//     // --- Boleta real ---
-//     console.log("Folio Asignado:", folioAsignado);
-
-//     // --- RESPUESTA RÁPIDA AL FRONT ---
-//     res.status(201).json({
-//       message: "Folio asignado correctamente",
-//       folio: folioAsignado,
-//       ficticia: false,
-//     });
-
-//     // --- TODO LO DEMÁS ASÍNCRONO ---
-//     (async () => {
-//       try {
-//         const producto = { nombre, precio };
-//         const payload = crearPayload(producto, folioAsignado);
-
-//         console.log("__dirname:", __dirname);
-//         console.log("CAF_PATH absoluto:", CAF_PATH);
-//         console.log("Tamaño CERT_PATH:", fs.statSync(CERT_PATH).size);
-//         console.log("Tamaño CAF_PATH:", fs.statSync(CAF_PATH).size);
-
-//         // Generar DTE
-//         const formGen = new FormData();
-//         formGen.append("files", fs.createReadStream(CERT_PATH));
-//         formGen.append("files2", fs.createReadStream(CAF_PATH));
-//         formGen.append("input", JSON.stringify(payload));
-
-//         const responseGen = await axios.post(
-//           `${API_URL}/dte/generar`,
-//           formGen,
-//           {
-//             headers: { Authorization: API_KEY, ...formGen.getHeaders() },
-//           }
-//         );
-//         const dteXml = responseGen.data;
-
-//         console.log("XML generado (primeras 500 chars):");
-//         console.log(dteXml.substring(0, 500));
-
-//         // Generar Sobre
-//         const { FechaResolucion, NumeroResolucion } =
-//           obtenerDatosResolucion(CAF_PATH);
-//         const formSobre = new FormData();
-//         formSobre.append(
-//           "input",
-//           JSON.stringify({
-//             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-//             Caratula: {
-//               RutEmisor: `${EMISOR_RUT}-${EMISOR_DV}`,
-//               RutReceptor: "60803000-K",
-//               FechaResolucion,
-//               NumeroResolucion,
-//             },
-//           })
-//         );
-//         formSobre.append("files", fs.createReadStream(CERT_PATH));
-//         formSobre.append("files", Buffer.from(dteXml, "utf-8"), {
-//           filename: `dte_${folioAsignado}.xml`,
-//         });
-
-//         const responseSobre = await axios.post(
-//           `${API_URL}/envio/generar`,
-//           formSobre,
-//           {
-//             headers: { Authorization: API_KEY, ...formSobre.getHeaders() },
-//             maxBodyLength: Infinity,
-//           }
-//         );
-//         const sobreXml = responseSobre.data;
-
-//         // Enviar al SII
-//         const formEnvio = new FormData();
-//         formEnvio.append("files", fs.createReadStream(CERT_PATH));
-//         formEnvio.append("files2", Buffer.from(sobreXml, "utf-8"), {
-//           filename: `sobre_${folioAsignado}.xml`,
-//         });
-//         formEnvio.append(
-//           "input",
-//           JSON.stringify({
-//             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-//             Ambiente: 0,
-//             Tipo: 2,
-//           })
-//         );
-
-//         console.log("Form envio:", formEnvio);
-
-//         const responseEnvio = await axios.post(
-//           `${API_URL}/envio/enviar`,
-//           formEnvio,
-//           {
-//             headers: { Authorization: API_KEY, ...formEnvio.getHeaders() },
-//           }
-//         );
-//         const trackId = responseEnvio.data?.trackId;
-//         console.log("TrackId recibido:", trackId);
-
-//         // Consultar estado
-//         const formConsulta = new FormData();
-//         formConsulta.append("files", fs.createReadStream(CERT_PATH));
-//         formConsulta.append(
-//           "input",
-//           JSON.stringify({
-//             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-//             RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
-//             TrackId: trackId,
-//             Ambiente: 0,
-//             ServidorBoletaREST: 1,
-//           })
-//         );
-
-//         const responseConsulta = await axios.post(
-//           `${API_URL}/consulta/envio`,
-//           formConsulta,
-//           {
-//             headers: { Authorization: API_KEY, ...formConsulta.getHeaders() },
-//           }
-//         );
-//         const estado = responseConsulta.data?.estado;
-//         console.log("Response Estado SII:", responseConsulta.data);
-//         const estadosValidos = ["ACE", "EPR", "REC", "SOK", "DOK"];
-//         const xmlBase64 = Buffer.from(dteXml, "utf-8").toString("base64");
-
-//         // Ajustar folio si estado es RSC
-//         let folioParaGuardar = folioAsignado;
-//         if (estado === "RSC") {
-//           folioParaGuardar = `${folioAsignado}-${Math.floor(
-//             Math.random() * 900000 + 100000
-//           )}`;
-//         }
-
-//         // Evaluar alerta
-//         const [ultimaBoleta] = await db.query(
-//           `SELECT folio, alerta FROM boletas ORDER BY id DESC LIMIT 1`
-//         );
-//         const alertaAnterior = ultimaBoleta[0]?.alerta;
-//         let alertaActual = false;
-
-//         if (totalFoliosRestantes < ALERTA_MIN_FOLIOS) {
-//           if (!alertaAnterior) {
-//             console.log("Enviando alerta de folios bajos...");
-//             await enviarAlertaCorreo(totalFoliosRestantes);
-//             alertaActual = true;
-//           } else {
-//             console.log(
-//               "Alerta ya enviada en la boleta anterior. No se envía mail nuevamente."
-//             );
-//             alertaActual = true;
-//           }
-//         } else {
-//           console.log("Folios suficientes, no se envía mail de alerta");
-//           alertaActual = false;
-//         }
-
-//         // Guardar boleta en DB
-//         await db.query(
-//           `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
-//            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-//           [
-//             folioParaGuardar,
-//             nombre,
-//             precio,
-//             fechaChile,
-//             estado,
-//             xmlBase64,
-//             trackId,
-//             alertaActual,
-//           ]
-//         );
-
-//         console.log(
-//           "Boleta guardada en base de datos con folio:",
-//           folioParaGuardar,
-//           "| alerta:",
-//           alertaActual
-//         );
-
-//         if (!estadosValidos.includes(estado)) {
-//           console.log(
-//             `El SII rechazó la boleta. Estado: ${estado || "desconocido"}`
-//           );
-//         }
-//       } catch (err) {
-//         console.error(
-//           "Error en flujo de boleta:",
-//           err.response?.data || err.message
-//         );
-//       }
-//     })();
-//   } catch (err) {
-//     console.error("Error al asignar folio:", err.message);
-//     if (!res.headersSent) res.status(500).json({ error: err.message });
-//   }
-// };
-
 exports.emitirBoleta = async (req, res) => {
   const { nombre, precio } = req.body;
   if (!nombre || !precio)
@@ -727,13 +507,14 @@ exports.emitirBoleta = async (req, res) => {
       await obtenerSiguienteFolio();
     console.log("CAF_PATH:", CAF_PATH);
 
+    // --- CASO: No hay folio disponible → boleta ficticia ---
     if (!folioAsignado) {
-      const folioFicticio = Math.floor(Math.random() * 90) + 10;
+      const folioFicticio = Math.floor(Math.random() * 90) + 10; // 2 dígitos
       console.log("No hay folios disponibles. Boleta ficticia:", folioFicticio);
 
       await db.query(
-        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE)`,
+        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE)`,
         [folioFicticio, nombre, precio, fechaChile, "FICTICIA", null, null]
       );
 
@@ -744,22 +525,28 @@ exports.emitirBoleta = async (req, res) => {
       });
     }
 
+    // --- Boleta real ---
     console.log("Folio Asignado:", folioAsignado);
 
-    // --- RESPUESTA INMEDIATA AL FRONT ---
+    // --- RESPUESTA RÁPIDA AL FRONT ---
     res.status(201).json({
       message: "Folio asignado correctamente",
       folio: folioAsignado,
       ficticia: false,
     });
 
-    // --- PROCESO ASÍNCRONO ---
+    // --- TODO LO DEMÁS ASÍNCRONO ---
     (async () => {
       try {
         const producto = { nombre, precio };
         const payload = crearPayload(producto, folioAsignado);
 
-        // --- GENERAR DTE ---
+        console.log("__dirname:", __dirname);
+        console.log("CAF_PATH absoluto:", CAF_PATH);
+        console.log("Tamaño CERT_PATH:", fs.statSync(CERT_PATH).size);
+        console.log("Tamaño CAF_PATH:", fs.statSync(CAF_PATH).size);
+
+        // Generar DTE
         const formGen = new FormData();
         formGen.append("files", fs.createReadStream(CERT_PATH));
         formGen.append("files2", fs.createReadStream(CAF_PATH));
@@ -772,21 +559,14 @@ exports.emitirBoleta = async (req, res) => {
             headers: { Authorization: API_KEY, ...formGen.getHeaders() },
           }
         );
-
         const dteXml = responseGen.data;
-        console.log(
-          "XML generado (primeras 500 chars):",
-          dteXml.substring(0, 500)
-        );
 
-        // Guardar DTE en archivo temporal (mantiene la firma)
-        const tempDTEPath = path.join(__dirname, `dte_${folioAsignado}.xml`);
-        fs.writeFileSync(tempDTEPath, dteXml, "utf8");
+        console.log("XML generado (primeras 500 chars):");
+        console.log(dteXml.substring(0, 500));
 
-        // --- GENERAR SOBRE ---
+        // Generar Sobre
         const { FechaResolucion, NumeroResolucion } =
           obtenerDatosResolucion(CAF_PATH);
-
         const formSobre = new FormData();
         formSobre.append(
           "input",
@@ -801,7 +581,9 @@ exports.emitirBoleta = async (req, res) => {
           })
         );
         formSobre.append("files", fs.createReadStream(CERT_PATH));
-        formSobre.append("files", fs.createReadStream(tempDTEPath)); // archivo firmado real
+        formSobre.append("files", Buffer.from(dteXml, "utf-8"), {
+          filename: `dte_${folioAsignado}.xml`,
+        });
 
         const responseSobre = await axios.post(
           `${API_URL}/envio/generar`,
@@ -811,20 +593,14 @@ exports.emitirBoleta = async (req, res) => {
             maxBodyLength: Infinity,
           }
         );
-
         const sobreXml = responseSobre.data;
 
-        // Guardar SOBRE firmado en archivo temporal
-        const tempSobrePath = path.join(
-          __dirname,
-          `sobre_${folioAsignado}.xml`
-        );
-        fs.writeFileSync(tempSobrePath, sobreXml, "utf8");
-
-        // --- ENVIAR AL SII ---
+        // Enviar al SII
         const formEnvio = new FormData();
         formEnvio.append("files", fs.createReadStream(CERT_PATH));
-        formEnvio.append("files2", fs.createReadStream(tempSobrePath)); // mantiene firma intacta
+        formEnvio.append("files2", Buffer.from(sobreXml, "utf-8"), {
+          filename: `sobre_${folioAsignado}.xml`,
+        });
         formEnvio.append(
           "input",
           JSON.stringify({
@@ -834,6 +610,8 @@ exports.emitirBoleta = async (req, res) => {
           })
         );
 
+        console.log("Form envio:", formEnvio);
+
         const responseEnvio = await axios.post(
           `${API_URL}/envio/enviar`,
           formEnvio,
@@ -841,11 +619,10 @@ exports.emitirBoleta = async (req, res) => {
             headers: { Authorization: API_KEY, ...formEnvio.getHeaders() },
           }
         );
-
         const trackId = responseEnvio.data?.trackId;
         console.log("TrackId recibido:", trackId);
 
-        // --- CONSULTAR ESTADO ---
+        // Consultar estado
         const formConsulta = new FormData();
         formConsulta.append("files", fs.createReadStream(CERT_PATH));
         formConsulta.append(
@@ -866,14 +643,12 @@ exports.emitirBoleta = async (req, res) => {
             headers: { Authorization: API_KEY, ...formConsulta.getHeaders() },
           }
         );
-
         const estado = responseConsulta.data?.estado;
         console.log("Response Estado SII:", responseConsulta.data);
-
         const estadosValidos = ["ACE", "EPR", "REC", "SOK", "DOK"];
-        const xmlBase64 = Buffer.from(dteXml, "utf8").toString("base64");
+        const xmlBase64 = Buffer.from(dteXml, "utf-8").toString("base64");
 
-        // --- AJUSTE DE FOLIO SI ESTADO RSC ---
+        // Ajustar folio si estado es RSC
         let folioParaGuardar = folioAsignado;
         if (estado === "RSC") {
           folioParaGuardar = `${folioAsignado}-${Math.floor(
@@ -881,7 +656,7 @@ exports.emitirBoleta = async (req, res) => {
           )}`;
         }
 
-        // --- ALERTA DE FOLIOS BAJOS ---
+        // Evaluar alerta
         const [ultimaBoleta] = await db.query(
           `SELECT folio, alerta FROM boletas ORDER BY id DESC LIMIT 1`
         );
@@ -894,12 +669,17 @@ exports.emitirBoleta = async (req, res) => {
             await enviarAlertaCorreo(totalFoliosRestantes);
             alertaActual = true;
           } else {
-            console.log("Alerta ya enviada anteriormente.");
+            console.log(
+              "Alerta ya enviada en la boleta anterior. No se envía mail nuevamente."
+            );
             alertaActual = true;
           }
+        } else {
+          console.log("Folios suficientes, no se envía mail de alerta");
+          alertaActual = false;
         }
 
-        // --- GUARDAR EN DB ---
+        // Guardar boleta en DB
         await db.query(
           `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
@@ -915,17 +695,18 @@ exports.emitirBoleta = async (req, res) => {
           ]
         );
 
-        console.log("Boleta guardada con folio:", folioParaGuardar);
+        console.log(
+          "Boleta guardada en base de datos con folio:",
+          folioParaGuardar,
+          "| alerta:",
+          alertaActual
+        );
 
         if (!estadosValidos.includes(estado)) {
           console.log(
             `El SII rechazó la boleta. Estado: ${estado || "desconocido"}`
           );
         }
-
-        // --- LIMPIEZA DE ARCHIVOS TEMPORALES ---
-        fs.unlinkSync(tempDTEPath);
-        fs.unlinkSync(tempSobrePath);
       } catch (err) {
         console.error(
           "Error en flujo de boleta:",
@@ -1009,7 +790,7 @@ exports.emitirLoteBoletas = async (req, res) => {
     (async () => {
       try {
         const productoLote = { nombre, precio: monto_total };
-        const payload = crearPayload(productoLote, folioAsignado);
+        const payload = crearPayload(productoLote, folioAsignado, cantidad);
 
         // Generar DTE
         const formGen = new FormData();
@@ -1075,6 +856,7 @@ exports.emitirLoteBoletas = async (req, res) => {
           { headers: { Authorization: API_KEY, ...formEnvio.getHeaders() } }
         );
         const trackId = responseEnvio.data?.trackId;
+        console.log("TrackId recibido:", trackId);
 
         // Consultar estado en SII
         const formConsulta = new FormData();

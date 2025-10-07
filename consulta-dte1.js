@@ -38,11 +38,20 @@ async function consultarEstadoDTE(trackId) {
       }
     );
 
-    const estado = response.data?.detalles[0].estado;
     console.log("response:", response.data);
-    console.log("Estado SII:", response.data?.detalles[0].estado);
-    console.log("Errores:", response.data?.detalles[0].errores);
-    return estado;
+
+    // Obtener el estado general
+    const detalles = response.data?.detalles;
+    const estadoSII = detalles?.[0]?.estado || response.data?.estado;
+    console.log("Estado SII:", estadoSII);
+
+    // Mostrar errores solo si existen
+    const errores = detalles?.[0]?.errores;
+    if (errores && errores !== "") {
+      console.log("Errores:", errores);
+    }
+
+    return estadoSII;
   } catch (err) {
     console.error(
       "Error consultando estado DTE:",
@@ -54,7 +63,7 @@ async function consultarEstadoDTE(trackId) {
 
 // --- Ejemplo de uso ---
 (async () => {
-  const trackId = "25436099"; // Reemplaza con tu track_id
+  const trackId = "25438229"; // Reemplaza con tu track_id
   const estado = await consultarEstadoDTE(trackId);
   console.log(`Estado final del DTE (${trackId}):`, estado);
 })();
