@@ -693,11 +693,59 @@ exports.emitirLoteBoletas = async (req, res) => {
   }
 
   try {
+    // --- Obtener todos los CAF disponibles y sus rangos ---
+    const archivosCAF = fs
+      .readdirSync(CAF_DIRECTORY)
+      .filter((f) => f.endsWith(".xml"));
+
+    if (!archivosCAF.length) {
+      return res
+        .status(400)
+        .json({ error: "No hay CAF disponibles para emitir boletas" });
+    }
+
+    const cafs = archivosCAF
+      .map((archivo) => {
+        const ruta = path.join(CAF_DIRECTORY, archivo);
+        const cafXml = fs.readFileSync(ruta, "utf-8");
+        const rngMatch = cafXml.match(
+          /<RNG>\s*<D>(\d+)<\/D>\s*<H>(\d+)<\/H>\s*<\/RNG>/
+        );
+        if (!rngMatch) return null;
+        return {
+          archivo,
+          ruta,
+          desde: parseInt(rngMatch[1].trim(), 10),
+          hasta: parseInt(rngMatch[2].trim(), 10),
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.desde - b.desde);
+
+    // --- Obtener último folio usado ---
+    const [rows] = await db.query(
+      "SELECT MAX(CAST(SUBSTRING_INDEX(folio, '-', 1) AS UNSIGNED)) AS ultimo FROM boletas WHERE (ficticia IS NULL OR ficticia = 0)"
+    );
+    let siguienteFolio = Number(rows[0]?.ultimo) + 1 || 1;
+
+    // --- Encontrar el CAF inicial que cubra el primer folio ---
+    let cafActualIndex = cafs.findIndex(
+      (c) => siguienteFolio >= c.desde && siguienteFolio <= c.hasta
+    );
+    if (cafActualIndex === -1) {
+      return res
+        .status(400)
+        .json({ error: "No hay CAF que cubra el siguiente folio disponible" });
+    }
+    let cafActual = cafs[cafActualIndex];
+    CAF_PATH = cafActual.ruta;
+
     // --- RESPUESTA RÁPIDA AL FRONT ---
     res.status(201).json({
       message: "Proceso de lote iniciado",
       cantidad,
       monto_total,
+      folio: siguienteFolio,
       ficticia: false,
     });
 
@@ -705,24 +753,26 @@ exports.emitirLoteBoletas = async (req, res) => {
     (async () => {
       try {
         const dteXmls = [];
-        let totalFoliosRestantes = 0;
-
         for (let i = 0; i < cantidad; i++) {
-          // --- Obtener folio y CAF individual para cada boleta ---
-          const {
-            folioAsignado,
-            CAF_PATH,
-            totalFoliosRestantes: foliosRest,
-          } = await obtenerSiguienteFolio();
-          totalFoliosRestantes = foliosRest;
-
-          const { FechaResolucion, NumeroResolucion } =
-            obtenerDatosResolucion(CAF_PATH);
+          // --- Cambiar CAF si folio supera el rango ---
+          if (siguienteFolio > cafActual.hasta) {
+            cafActualIndex++;
+            if (cafActualIndex >= cafs.length) {
+              console.warn(
+                `Se acabaron los folios de todos los CAFs antes de terminar el lote.`
+              );
+              break; // No hay más folios disponibles
+            }
+            cafActual = cafs[cafActualIndex];
+            CAF_PATH = cafActual.ruta;
+            console.log(
+              `Cambiando al siguiente CAF: ${cafActual.archivo} | folios ${cafActual.desde}-${cafActual.hasta}`
+            );
+          }
 
           const productoLote = { nombre, precio };
-          const payload = crearPayload(productoLote, folioAsignado);
+          const payload = crearPayload(productoLote, siguienteFolio);
 
-          // --- Generar DTE ---
           const formGen = new FormData();
           formGen.append("files", fs.createReadStream(CERT_PATH));
           formGen.append("files2", fs.createReadStream(CAF_PATH));
@@ -731,19 +781,24 @@ exports.emitirLoteBoletas = async (req, res) => {
           const responseGen = await axios.post(
             `${API_URL}/dte/generar`,
             formGen,
-            {
-              headers: { Authorization: API_KEY, ...formGen.getHeaders() },
-            }
+            { headers: { Authorization: API_KEY, ...formGen.getHeaders() } }
           );
 
           const xml = responseGen.data;
+          const { FechaResolucion, NumeroResolucion } =
+            obtenerDatosResolucion(CAF_PATH);
+
           dteXmls.push({
-            folio: folioAsignado,
+            folio: siguienteFolio,
             xml,
             FechaResolucion,
             NumeroResolucion,
           });
+
+          siguienteFolio++;
         }
+
+        if (!dteXmls.length) return;
 
         // --- Generar un solo sobre con todos los DTE ---
         const formSobre = new FormData();
@@ -760,7 +815,6 @@ exports.emitirLoteBoletas = async (req, res) => {
           })
         );
         formSobre.append("files", fs.createReadStream(CERT_PATH));
-
         for (const { folio, xml } of dteXmls) {
           formSobre.append("files", Buffer.from(xml, "utf-8"), {
             filename: `dte_${folio}.xml`,
@@ -782,7 +836,7 @@ exports.emitirLoteBoletas = async (req, res) => {
         const formEnvio = new FormData();
         formEnvio.append("files", fs.createReadStream(CERT_PATH));
         formEnvio.append("files2", Buffer.from(sobreXml, "utf-8"), {
-          filename: `sobre_lote.xml`,
+          filename: "sobre_lote.xml",
         });
         formEnvio.append(
           "input",
@@ -802,6 +856,7 @@ exports.emitirLoteBoletas = async (req, res) => {
         );
 
         const trackId = responseEnvio.data?.trackId;
+        console.log("trackId:", trackId);
 
         // --- Consultar estado ---
         const formConsulta = new FormData();
@@ -830,25 +885,30 @@ exports.emitirLoteBoletas = async (req, res) => {
 
         // --- Alerta folios bajos ---
         const [ultimaBoleta] = await db.query(
-          `SELECT alerta FROM boletas ORDER BY id DESC LIMIT 1`
+          "SELECT alerta FROM boletas ORDER BY id DESC LIMIT 1"
         );
         const alertaAnterior = ultimaBoleta[0]?.alerta;
         let alertaActual = false;
+
+        const totalFoliosRestantes = cafs
+          .slice(cafActualIndex)
+          .reduce(
+            (acc, c) => acc + (c.hasta - Math.max(c.desde, siguienteFolio) + 1),
+            0
+          );
 
         if (totalFoliosRestantes < ALERTA_MIN_FOLIOS) {
           if (!alertaAnterior) await enviarAlertaCorreo(totalFoliosRestantes);
           alertaActual = true;
         }
 
-        // --- Guardar todas las boletas con folios reales ---
+        // --- Guardar todas las boletas con folios únicos ---
         for (const { folio } of dteXmls) {
           await db.query(
-            `INSERT INTO boletas 
-              (folio, folio_padre, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) 
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+            "INSERT INTO boletas (folio, folio_padre, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
             [
               folio,
-              null, // folio_padre = null porque cada uno es individual
+              null,
               nombre,
               precio,
               fechaChile,
@@ -862,19 +922,18 @@ exports.emitirLoteBoletas = async (req, res) => {
           );
         }
 
-        console.log(`✅ Lote de ${cantidad} boletas generado correctamente`);
+        console.log(
+          `Lote de ${dteXmls.length} boletas generado correctamente y guardado en BD`
+        );
       } catch (err) {
         console.error(
-          "❌ Error en flujo del lote:",
+          "Error en flujo del lote:",
           err.response?.data || err.message
         );
       }
     })();
   } catch (err) {
-    console.error(
-      "❌ Error al procesar lote:",
-      err.response?.data || err.message
-    );
+    console.error("Error al procesar lote:", err.response?.data || err.message);
     if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 };
@@ -941,6 +1000,10 @@ exports.obtenerStatusSuscripcion = async (req, res) => {
     });
   }
 };
+
+function obtenerCAFPorFolio(folio, cafs) {
+  return cafs.find((c) => folio >= c.desde && folio <= c.hasta);
+}
 
 exports.borrarTodasLasBoletas = async (req, res) => {
   try {
