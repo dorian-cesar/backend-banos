@@ -19,56 +19,10 @@ let CAF_PATH;
 
 // --- Función para crear payload según producto ---
 function crearPayload(producto, folio, cantidad = 1) {
-  //   return {
-  //     Documento: {
-  //       Encabezado: {
-  //         IdentificacionDTE: {
-  //           TipoDTE: 39, // Boleta electrónica
-  //           Folio: folio,
-  //           FechaEmision: new Date().toISOString().split("T")[0],
-  //           IndicadorServicio: 3,
-  //         },
-  //         Emisor: {
-  //           Rut: `${EMISOR_RUT}-${EMISOR_DV}`,
-  //           RazonSocialBoleta: "WIT INNOVACION TECNOLOGICA SPA",
-  //           GiroBoleta:
-  //             "OTRAS ACTIVIDADES DE TECNOLOGIA DE LA INFORMACION Y DE SERVICIOS INFORMATICOS",
-  //           DireccionOrigen: "SAN BORJA 1251",
-  //           ComunaOrigen: "ESTACION CENTRAL",
-  //         },
-  //         Receptor: {
-  //           Rut: "66666666-6", // consumidor final
-  //           RazonSocial: "Consumidor final",
-  //           Direccion: "Sin dirección",
-  //           Comuna: "Santiago",
-  //         },
-  //         Totales: {
-  //           MontoNeto: montoNeto,
-  //           IVA: iva,
-  //           MontoTotal: precioBruto,
-  //           MontoExento: 0,
-  //         },
-  //       },
-  //       Detalles: [
-  //         {
-  //           Nombre: producto.nombre,
-  //           Cantidad: 1,
-  //           Precio: montoNeto,
-  //           MontoItem: montoNeto,
-  //           IndicadorExento: 0,
-  //         },
-  //       ],
-  //     },
-  //     Certificado: {
-  //       Rut: process.env.CERT_RUT,
-  //       Password: process.env.CERT_PASS,
-  //     },
-  //   };
-  // }
-
-  const precioBruto = producto.precio; // total final
-  const montoNeto = Math.round(precioBruto / 1.19); // antes de IVA
-  const iva = precioBruto - montoNeto; // IVA del total
+  const precioUnitario = producto.precio;
+  const precioTotal = precioUnitario * cantidad;
+  const montoNeto = Math.round(precioTotal / 1.19);
+  const iva = precioTotal - montoNeto;
 
   return {
     Documento: {
@@ -95,17 +49,15 @@ function crearPayload(producto, folio, cantidad = 1) {
         Totales: {
           MontoNeto: montoNeto,
           IVA: iva,
-          MontoTotal: precioBruto,
-          MontoExento: 0,
+          MontoTotal: precioTotal,
         },
       },
       Detalles: [
         {
           Nombre: producto.nombre,
           Cantidad: cantidad,
-          Precio: precioBruto * cantidad,
-          IVA: iva,
-          MontoItem: montoNeto + iva,
+          Precio: precioUnitario,
+          MontoItem: precioTotal,
           IndicadorExento: 0,
         },
       ],
@@ -720,7 +672,7 @@ exports.emitirBoleta = async (req, res) => {
   }
 };
 
-// ----- Endpoint: emitir un lote de boletas con 1 solo folio en el SII -----
+// ----- Endpoint: emitir un lote de boletas (todas con folios reales válidos) -----
 exports.emitirLoteBoletas = async (req, res) => {
   let { nombre, precio, cantidad, monto_total } = req.body;
 
@@ -741,75 +693,59 @@ exports.emitirLoteBoletas = async (req, res) => {
   }
 
   try {
-    const { folioAsignado, CAF_PATH, totalFoliosRestantes } =
-      await obtenerSiguienteFolio();
-
-    // --- CASO: No hay folio disponible → generar lote ficticio ---
-    if (!folioAsignado) {
-      const folioFicticioPadre = Math.floor(Math.random() * 90) + 10;
-
-      for (let i = 0; i < cantidad; i++) {
-        await db.query(
-          `INSERT INTO boletas 
-            (folio, folio_padre, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
-          [
-            `${folioFicticioPadre}-${i + 1}`,
-            folioFicticioPadre,
-            nombre,
-            precio,
-            fechaChile,
-            "FICTICIA",
-            null,
-            null,
-            monto_total,
-            cantidad,
-          ]
-        );
-      }
-
-      return res.status(201).json({
-        message: "No hay folios disponibles. Se generó un lote ficticio.",
-        folio_padre: folioFicticioPadre,
-        cantidad,
-        monto_total,
-        ficticia: true,
-      });
-    }
-
     // --- RESPUESTA RÁPIDA AL FRONT ---
     res.status(201).json({
-      message: "Folio asignado correctamente",
-      folio_padre: folioAsignado,
+      message: "Proceso de lote iniciado",
       cantidad,
       monto_total,
       ficticia: false,
     });
 
-    // --- TODO LO DEMÁS ASÍNCRONO ---
+    // --- TODO ASÍNCRONO ---
     (async () => {
       try {
-        const productoLote = { nombre, precio: monto_total };
-        const payload = crearPayload(productoLote, folioAsignado, cantidad);
+        const dteXmls = [];
+        let totalFoliosRestantes = 0;
 
-        // Generar DTE
-        const formGen = new FormData();
-        formGen.append("files", fs.createReadStream(CERT_PATH));
-        formGen.append("files2", fs.createReadStream(CAF_PATH));
-        formGen.append("input", JSON.stringify(payload));
+        for (let i = 0; i < cantidad; i++) {
+          // --- Obtener folio y CAF individual para cada boleta ---
+          const {
+            folioAsignado,
+            CAF_PATH,
+            totalFoliosRestantes: foliosRest,
+          } = await obtenerSiguienteFolio();
+          totalFoliosRestantes = foliosRest;
 
-        const responseGen = await axios.post(
-          `${API_URL}/dte/generar`,
-          formGen,
-          {
-            headers: { Authorization: API_KEY, ...formGen.getHeaders() },
-          }
-        );
-        const dteXml = responseGen.data;
+          const { FechaResolucion, NumeroResolucion } =
+            obtenerDatosResolucion(CAF_PATH);
 
-        // Generar Sobre
-        const { FechaResolucion, NumeroResolucion } =
-          obtenerDatosResolucion(CAF_PATH);
+          const productoLote = { nombre, precio };
+          const payload = crearPayload(productoLote, folioAsignado);
+
+          // --- Generar DTE ---
+          const formGen = new FormData();
+          formGen.append("files", fs.createReadStream(CERT_PATH));
+          formGen.append("files2", fs.createReadStream(CAF_PATH));
+          formGen.append("input", JSON.stringify(payload));
+
+          const responseGen = await axios.post(
+            `${API_URL}/dte/generar`,
+            formGen,
+            {
+              headers: { Authorization: API_KEY, ...formGen.getHeaders() },
+            }
+          );
+
+          const xml = responseGen.data;
+          dteXmls.push({
+            folio: folioAsignado,
+            xml,
+            FechaResolucion,
+            NumeroResolucion,
+          });
+        }
+
+        // --- Generar un solo sobre con todos los DTE ---
         const formSobre = new FormData();
         formSobre.append(
           "input",
@@ -818,28 +754,35 @@ exports.emitirLoteBoletas = async (req, res) => {
             Caratula: {
               RutEmisor: `${EMISOR_RUT}-${EMISOR_DV}`,
               RutReceptor: "60803000-K",
-              FechaResolucion,
-              NumeroResolucion,
+              FechaResolucion: dteXmls[0].FechaResolucion,
+              NumeroResolucion: dteXmls[0].NumeroResolucion,
             },
           })
         );
         formSobre.append("files", fs.createReadStream(CERT_PATH));
-        formSobre.append("files", Buffer.from(dteXml, "utf-8"), {
-          filename: `dte_${folioAsignado}.xml`,
-        });
+
+        for (const { folio, xml } of dteXmls) {
+          formSobre.append("files", Buffer.from(xml, "utf-8"), {
+            filename: `dte_${folio}.xml`,
+          });
+        }
 
         const responseSobre = await axios.post(
           `${API_URL}/envio/generar`,
           formSobre,
-          { headers: { Authorization: API_KEY, ...formSobre.getHeaders() } }
+          {
+            headers: { Authorization: API_KEY, ...formSobre.getHeaders() },
+            maxBodyLength: Infinity,
+          }
         );
+
         const sobreXml = responseSobre.data;
 
-        // Enviar al SII
+        // --- Enviar sobre al SII ---
         const formEnvio = new FormData();
         formEnvio.append("files", fs.createReadStream(CERT_PATH));
         formEnvio.append("files2", Buffer.from(sobreXml, "utf-8"), {
-          filename: `sobre_${folioAsignado}.xml`,
+          filename: `sobre_lote.xml`,
         });
         formEnvio.append(
           "input",
@@ -853,12 +796,14 @@ exports.emitirLoteBoletas = async (req, res) => {
         const responseEnvio = await axios.post(
           `${API_URL}/envio/enviar`,
           formEnvio,
-          { headers: { Authorization: API_KEY, ...formEnvio.getHeaders() } }
+          {
+            headers: { Authorization: API_KEY, ...formEnvio.getHeaders() },
+          }
         );
-        const trackId = responseEnvio.data?.trackId;
-        console.log("TrackId recibido:", trackId);
 
-        // Consultar estado en SII
+        const trackId = responseEnvio.data?.trackId;
+
+        // --- Consultar estado ---
         const formConsulta = new FormData();
         formConsulta.append("files", fs.createReadStream(CERT_PATH));
         formConsulta.append(
@@ -875,13 +820,15 @@ exports.emitirLoteBoletas = async (req, res) => {
         const responseConsulta = await axios.post(
           `${API_URL}/consulta/envio`,
           formConsulta,
-          { headers: { Authorization: API_KEY, ...formConsulta.getHeaders() } }
+          {
+            headers: { Authorization: API_KEY, ...formConsulta.getHeaders() },
+          }
         );
-        const estado = responseConsulta.data?.estado;
-        const estadosValidos = ["ACE", "EPR", "REC", "SOK", "DOK"];
-        const xmlBase64 = Buffer.from(dteXml, "utf-8").toString("base64");
 
-        // Verificar alerta por folios bajos
+        const estado = responseConsulta.data?.estado || "PEND";
+        const xmlBase64 = Buffer.from(sobreXml, "utf-8").toString("base64");
+
+        // --- Alerta folios bajos ---
         const [ultimaBoleta] = await db.query(
           `SELECT alerta FROM boletas ORDER BY id DESC LIMIT 1`
         );
@@ -889,24 +836,19 @@ exports.emitirLoteBoletas = async (req, res) => {
         let alertaActual = false;
 
         if (totalFoliosRestantes < ALERTA_MIN_FOLIOS) {
-          if (!alertaAnterior) {
-            console.log("Enviando alerta de folios bajos...");
-            await enviarAlertaCorreo(totalFoliosRestantes);
-            alertaActual = true;
-          } else {
-            alertaActual = true;
-          }
+          if (!alertaAnterior) await enviarAlertaCorreo(totalFoliosRestantes);
+          alertaActual = true;
         }
 
-        // Guardar N boletas hijas
-        for (let i = 0; i < cantidad; i++) {
+        // --- Guardar todas las boletas con folios reales ---
+        for (const { folio } of dteXmls) {
           await db.query(
             `INSERT INTO boletas 
               (folio, folio_padre, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) 
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
             [
-              `${folioAsignado}-${i + 1}`,
-              folioAsignado,
+              folio,
+              null, // folio_padre = null porque cada uno es individual
               nombre,
               precio,
               fechaChile,
@@ -919,15 +861,20 @@ exports.emitirLoteBoletas = async (req, res) => {
             ]
           );
         }
+
+        console.log(`✅ Lote de ${cantidad} boletas generado correctamente`);
       } catch (err) {
         console.error(
-          "Error en flujo del lote:",
+          "❌ Error en flujo del lote:",
           err.response?.data || err.message
         );
       }
     })();
   } catch (err) {
-    console.error("Error en flujo lote:", err.response?.data || err.message);
+    console.error(
+      "❌ Error al procesar lote:",
+      err.response?.data || err.message
+    );
     if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 };

@@ -63,7 +63,7 @@ async function consultarEstadoDTE(trackId) {
 
 // --- Ejemplo de uso ---
 (async () => {
-  const trackId = "25438229"; // Reemplaza con tu track_id
+  const trackId = "19078219209"; // Reemplaza con tu track_id
   const estado = await consultarEstadoDTE(trackId);
   console.log(`Estado final del DTE (${trackId}):`, estado);
 })();
