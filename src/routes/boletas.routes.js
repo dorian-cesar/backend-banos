@@ -8,6 +8,6 @@ router.get("/status", boletasController.obtenerStatusSuscripcion);
 router.post("/enviar", boletasController.emitirBoleta);
 router.post("/enviar-lote", boletasController.emitirLoteBoletas);
 router.post("/solicitar-folios", boletasController.solicitarNuevosFolios);
-router.delete("/borrar-boletas", boletasController.borrarTodasLasBoletas);
+// router.delete("/borrar-boletas", boletasController.borrarTodasLasBoletas);
 
 module.exports = router;

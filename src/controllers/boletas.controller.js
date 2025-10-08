@@ -14,7 +14,7 @@ const EMISOR_DV = process.env.EMISOR_DV;
 const CERT_PATH = __dirname + "/../../certificado/certificado.pfx";
 const CERT_PASS = process.env.CERT_PASS;
 const CAF_DIRECTORY = __dirname + "/../../caf/";
-const ALERTA_MIN_FOLIOS = 100;
+const ALERTA_MIN_FOLIOS = 10000;
 let CAF_PATH;
 
 // --- Función para crear payload según producto ---
@@ -461,7 +461,9 @@ exports.emitirBoleta = async (req, res) => {
 
     // --- CASO: No hay folio disponible → boleta ficticia ---
     if (!folioAsignado) {
-      const folioFicticio = Math.floor(Math.random() * 90) + 10; // 2 dígitos
+      // Generar folio ficticio con formato ###-####
+      const folioFicticio = await generarFolioFicticioUnico(db);
+
       console.log("No hay folios disponibles. Boleta ficticia:", folioFicticio);
 
       await db.query(
@@ -693,17 +695,70 @@ exports.emitirLoteBoletas = async (req, res) => {
   }
 
   try {
+    // --- Variable para enviar folio al front ---
+    let folioParaRespuesta;
+
     // --- Obtener todos los CAF disponibles y sus rangos ---
     const archivosCAF = fs
       .readdirSync(CAF_DIRECTORY)
       .filter((f) => f.endsWith(".xml"));
 
+    // --- Manejo de casos sin CAF o folios insuficientes (lote ficticio completo) ---
     if (!archivosCAF.length) {
-      return res
-        .status(400)
-        .json({ error: "No hay CAF disponibles para emitir boletas" });
+      console.warn(
+        "No hay CAF disponibles, generando lote completamente ficticio..."
+      );
+
+      // Primer folio ficticio para la respuesta
+      folioParaRespuesta = await generarFolioFicticioUnico(db);
+
+      // Insertar primer folio
+      await db.query(
+        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
+        [
+          folioParaRespuesta,
+          nombre,
+          precio,
+          fechaChile,
+          "FICTICIA",
+          null,
+          null,
+          monto_total,
+          cantidad,
+        ]
+      );
+
+      // Insertar restantes boletas ficticias
+      for (let i = 1; i < cantidad; i++) {
+        const folioFicticio = await generarFolioFicticioUnico(db);
+        await db.query(
+          `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
+          [
+            folioFicticio,
+            nombre,
+            precio,
+            fechaChile,
+            "FICTICIA",
+            null,
+            null,
+            monto_total,
+            cantidad,
+          ]
+        );
+      }
+
+      return res.status(201).json({
+        message:
+          "No hay CAF disponibles. Se generó un lote de boletas ficticias.",
+        cantidad,
+        ficticia: true,
+        folio: folioParaRespuesta,
+      });
     }
 
+    // --- Preparar CAFs disponibles ---
     const cafs = archivosCAF
       .map((archivo) => {
         const ruta = path.join(CAF_DIRECTORY, archivo);
@@ -740,29 +795,57 @@ exports.emitirLoteBoletas = async (req, res) => {
     let cafActual = cafs[cafActualIndex];
     CAF_PATH = cafActual.ruta;
 
+    // --- Primer folio real para respuesta ---
+    folioParaRespuesta = siguienteFolio;
+
     // --- RESPUESTA RÁPIDA AL FRONT ---
     res.status(201).json({
       message: "Proceso de lote iniciado",
       cantidad,
       monto_total,
-      folio: siguienteFolio,
       ficticia: false,
+      folio: folioParaRespuesta,
     });
 
-    // --- TODO ASÍNCRONO ---
+    // --- Flujo asíncrono del lote ---
     (async () => {
       try {
         const dteXmls = [];
         for (let i = 0; i < cantidad; i++) {
-          // --- Cambiar CAF si folio supera el rango ---
+          // Cambiar CAF si folio supera el rango
           if (siguienteFolio > cafActual.hasta) {
             cafActualIndex++;
+
             if (cafActualIndex >= cafs.length) {
               console.warn(
-                `Se acabaron los folios de todos los CAFs antes de terminar el lote.`
+                `Se acabaron los folios reales antes de completar el lote. Generando boletas ficticias restantes...`
               );
-              break; // No hay más folios disponibles
+
+              const faltantes = cantidad - i;
+              for (let j = 0; j < faltantes; j++) {
+                const folioFicticio = await generarFolioFicticioUnico(db);
+                await db.query(
+                  `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
+                  [
+                    folioFicticio,
+                    nombre,
+                    precio,
+                    fechaChile,
+                    "FICTICIA",
+                    null,
+                    null,
+                    monto_total,
+                    cantidad,
+                  ]
+                );
+              }
+              console.log(
+                `Lote mixto generado: ${i} boletas reales + ${faltantes} ficticias`
+              );
+              break;
             }
+
             cafActual = cafs[cafActualIndex];
             CAF_PATH = cafActual.ruta;
             console.log(
@@ -770,6 +853,7 @@ exports.emitirLoteBoletas = async (req, res) => {
             );
           }
 
+          // Generar DTE real
           const productoLote = { nombre, precio };
           const payload = crearPayload(productoLote, siguienteFolio);
 
@@ -1001,19 +1085,35 @@ exports.obtenerStatusSuscripcion = async (req, res) => {
   }
 };
 
-function obtenerCAFPorFolio(folio, cafs) {
-  return cafs.find((c) => folio >= c.desde && folio <= c.hasta);
+async function generarFolioFicticioUnico(db) {
+  let folio;
+  let existe = true;
+
+  while (existe) {
+    const base = Math.floor(Math.random() * 900) + 100; // 3 dígitos
+    const sufijo = Math.floor(Math.random() * 9000) + 1000; // 4 dígitos
+    folio = `${base}-${sufijo}`;
+
+    // Verificar en la base si ya existe ese folio
+    const [rows] = await db.query(
+      "SELECT id FROM boletas WHERE folio = ? LIMIT 1",
+      [folio]
+    );
+    existe = rows.length > 0;
+  }
+
+  return folio;
 }
 
-exports.borrarTodasLasBoletas = async (req, res) => {
-  try {
-    const [result] = await db.query("DELETE FROM boletas");
+// exports.borrarTodasLasBoletas = async (req, res) => {
+//   try {
+//     const [result] = await db.query("DELETE FROM boletas");
 
-    res.status(200).json({
-      message: `Se eliminaron ${result.affectedRows} boletas`,
-    });
-  } catch (error) {
-    console.error("Error al borrar todas las boletas:", error);
-    res.status(500).json({ error: "Error al borrar todas las boletas" });
-  }
-};
+//     res.status(200).json({
+//       message: `Se eliminaron ${result.affectedRows} boletas`,
+//     });
+//   } catch (error) {
+//     console.error("Error al borrar todas las boletas:", error);
+//     res.status(500).json({ error: "Error al borrar todas las boletas" });
+//   }
+// };
