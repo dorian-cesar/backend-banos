@@ -14,7 +14,7 @@ const EMISOR_DV = process.env.EMISOR_DV;
 const CERT_PATH = __dirname + "/../../certificado/certificado.pfx";
 const CERT_PASS = process.env.CERT_PASS;
 const CAF_DIRECTORY = __dirname + "/../../caf/";
-const ALERTA_MIN_FOLIOS = 100;
+const ALERTA_MIN_FOLIOS = 10000;
 let CAF_PATH;
 
 // --- Función para crear payload según producto ---
@@ -198,7 +198,7 @@ exports.solicitarNuevosFolios = async (req, res) => {
         RutCertificado: process.env.CERT_RUT,
         Password: CERT_PASS,
         RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
-        Ambiente: 0,
+        Ambiente: 1,
       })
     );
     data.append("files", fs.createReadStream(CERT_PATH));
@@ -260,8 +260,7 @@ async function enviarAlertaCorreo(totalFoliosRestantes) {
 
     const info = await transporter.sendMail({
       from: `"Sistema Boletas" <${process.env.SMTP_USER}>`,
-      // to: "dwigodski@wit.la, sandoval.jesus2005@gmail.com",
-      to: "dwigodski@wit.la",
+      to: "dwigodski@wit.la, epaz@wit.la, dgonzalez@wit.la",
       subject: "🚨 Alerta: folios disponibles bajos!",
       text: `Quedan solo ${totalFoliosRestantes} folios disponibles en el sistema de boletas de Baño y Duchas en el Terminal.\n Por favor solicita nuevos folios lo antes posible.\n Solicita la obtención de nuevos folios con sus credenciales aquí: https://mantenedor-banios.netlify.app/dashboard/folios\n`,
     });
@@ -284,7 +283,7 @@ async function enviarAlertaCorreoSimpleAPI(peticionesRestantes) {
 
     const info = await transporter.sendMail({
       from: `"Sistema Boletas" <${process.env.SMTP_USER}>`,
-      to: "dwigodski@wit.la",
+      to: "dwigodski@wit.la, epaz@wit.la, dgonzalez@wit.la",
       subject: "🚨 Alerta: peticiones disponibles bajas en SimpleAPI",
       text: `Quedan solo ${peticionesRestantes} peticiones disponibles en tu suscripción de SimpleAPI.\nPor favor verifica tu límite y solicita renovación si es necesario.`,
     });
@@ -559,7 +558,7 @@ exports.emitirBoleta = async (req, res) => {
           "input",
           JSON.stringify({
             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-            Ambiente: 0,
+            Ambiente: 1,
             Tipo: 2,
           })
         );
@@ -585,7 +584,7 @@ exports.emitirBoleta = async (req, res) => {
             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
             RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
             TrackId: trackId,
-            Ambiente: 0,
+            Ambiente: 1,
             ServidorBoletaREST: 1,
           })
         );
@@ -926,7 +925,7 @@ exports.emitirLoteBoletas = async (req, res) => {
           "input",
           JSON.stringify({
             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-            Ambiente: 0,
+            Ambiente: 1,
             Tipo: 2,
           })
         );
@@ -951,7 +950,7 @@ exports.emitirLoteBoletas = async (req, res) => {
             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
             RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
             TrackId: trackId,
-            Ambiente: 0,
+            Ambiente: 1,
             ServidorBoletaREST: 1,
           })
         );
