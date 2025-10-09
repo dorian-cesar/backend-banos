@@ -14,7 +14,7 @@ const EMISOR_DV = process.env.EMISOR_DV;
 const CERT_PATH = __dirname + "/../../certificado/certificado.pfx";
 const CERT_PASS = process.env.CERT_PASS;
 const CAF_DIRECTORY = __dirname + "/../../caf/";
-const ALERTA_MIN_FOLIOS = 10000;
+const ALERTA_MIN_FOLIOS = 15000;
 let CAF_PATH;
 let ultimaAlertaSimpleAPI = 0; // timestamp (ms)
 const COOLDOWN_ALERTA_SIMPLE_API = 60 * 60 * 2000; // 2 horas
@@ -867,18 +867,16 @@ exports.emitirLoteBoletas = async (req, res) => {
           // Cambiar CAF si folio supera el rango
           if (siguienteFolio > cafActual.hasta) {
             cafActualIndex++;
-
             if (cafActualIndex >= cafs.length) {
-              console.warn(
-                `Se acabaron los folios reales antes de completar el lote. Generando boletas ficticias restantes...`
+              console.log(
+                `Se acabaron los folios reales. Boletas restantes serán ficticias.`
               );
-
               const faltantes = cantidad - i;
               for (let j = 0; j < faltantes; j++) {
                 const folioFicticio = await generarFolioFicticioUnico(db);
                 await db.query(
                   `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
                   [
                     folioFicticio,
                     nombre,
@@ -892,29 +890,20 @@ exports.emitirLoteBoletas = async (req, res) => {
                   ]
                 );
               }
-              console.log(
-                `Lote mixto generado: ${i} boletas reales + ${faltantes} ficticias`
-              );
               break;
             }
-
             cafActual = cafs[cafActualIndex];
             CAF_PATH = cafActual.ruta;
-            console.log(
-              `Cambiando al siguiente CAF: ${cafActual.archivo} | folios ${cafActual.desde}-${cafActual.hasta}`
-            );
           }
 
-          // Generar DTE real
-          const productoLote = { nombre, precio };
-          const payload = crearPayload(productoLote, siguienteFolio);
-
-          const formGen = new FormData();
-          formGen.append("files", fs.createReadStream(CERT_PATH));
-          formGen.append("files2", fs.createReadStream(CAF_PATH));
-          formGen.append("input", JSON.stringify(payload));
-
           try {
+            // --- Crear DTE individual ---
+            const payload = crearPayload({ nombre, precio }, siguienteFolio);
+            const formGen = new FormData();
+            formGen.append("files", fs.createReadStream(CERT_PATH));
+            formGen.append("files2", fs.createReadStream(CAF_PATH));
+            formGen.append("input", JSON.stringify(payload));
+
             const responseGen = await axios.post(
               `${API_URL}/dte/generar`,
               formGen,
@@ -923,82 +912,170 @@ exports.emitirLoteBoletas = async (req, res) => {
               }
             );
 
-            const xml = responseGen.data;
+            const dteXml = responseGen.data;
+
+            // --- Generar sobre individual ---
             const { FechaResolucion, NumeroResolucion } =
               obtenerDatosResolucion(CAF_PATH);
-
-            dteXmls.push({
-              folio: siguienteFolio,
-              xml,
-              FechaResolucion,
-              NumeroResolucion,
+            const formSobre = new FormData();
+            formSobre.append(
+              "input",
+              JSON.stringify({
+                Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
+                Caratula: {
+                  RutEmisor: `${EMISOR_RUT}-${EMISOR_DV}`,
+                  RutReceptor: "60803000-K",
+                  FechaResolucion,
+                  NumeroResolucion,
+                },
+              })
+            );
+            formSobre.append("files", fs.createReadStream(CERT_PATH));
+            formSobre.append("files", Buffer.from(dteXml, "utf-8"), {
+              filename: `dte_${siguienteFolio}.xml`,
             });
-          } catch (error) {
-            console.warn(
-              `Error con SimpleAPI en folio ${siguienteFolio}: ${error.message}`
+
+            const responseSobre = await axios.post(
+              `${API_URL}/envio/generar`,
+              formSobre,
+              {
+                headers: { Authorization: API_KEY, ...formSobre.getHeaders() },
+                maxBodyLength: Infinity,
+              }
+            );
+            const sobreXml = responseSobre.data;
+
+            // --- Enviar al SII ---
+            const formEnvio = new FormData();
+            formEnvio.append("files", fs.createReadStream(CERT_PATH));
+            formEnvio.append("files2", Buffer.from(sobreXml, "utf-8"), {
+              filename: `sobre_${siguienteFolio}.xml`,
+            });
+            formEnvio.append(
+              "input",
+              JSON.stringify({
+                Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
+                Ambiente: 1,
+                Tipo: 2,
+              })
             );
 
-            // Detectar caída o límite
-            const isSimpleApiError =
-              error.code === "ECONNRESET" ||
-              error.code === "ETIMEDOUT" ||
-              error.code === "ECONNREFUSED" ||
-              error.code === "EAI_AGAIN" || // DNS timeout
-              (error.response &&
-                (error.response.status >= 429 || // límite o error del servidor
-                  error.response.status >= 500));
-
-            if (isSimpleApiError) {
-              console.log(
-                `Error o límite de SimpleAPI (folio ${siguienteFolio}) — se guarda boleta ficticia`
-              );
-
-              await db.query(
-                `INSERT INTO boletas (
-                  folio, producto, precio, fecha, estado_sii, xml_base64, track_id,
-                  ficticia, alerta, monto_lote, cantidad_lote
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
-                [
-                  siguienteFolio,
-                  nombre,
-                  precio,
-                  fechaChile,
-                  "FICTICIA",
-                  null,
-                  null,
-                  monto_total,
-                  cantidad,
-                ]
-              );
-
-              // --- Enviar alerta por correo si no se ha enviado recientemente ---
-              const ahora = Date.now();
-              if (ahora - ultimaAlertaSimpleAPI > COOLDOWN_ALERTA_SIMPLE_API) {
-                console.log(
-                  "Enviando alerta: SimpleAPI no responde o alcanzó su límite..."
-                );
-                try {
-                  await enviarAlertaCorreoSimpleAPI(0);
-                  ultimaAlertaSimpleAPI = ahora;
-                } catch (mailError) {
-                  console.error(
-                    "Error al enviar correo de alerta SimpleAPI:",
-                    mailError
-                  );
-                }
-              } else {
-                console.log(
-                  "Alerta SimpleAPI ya enviada recientemente. No se reenvía."
-                );
+            const responseEnvio = await axios.post(
+              `${API_URL}/envio/enviar`,
+              formEnvio,
+              {
+                headers: { Authorization: API_KEY, ...formEnvio.getHeaders() },
               }
+            );
+            const trackId = responseEnvio.data?.trackId;
 
-              siguienteFolio++;
-              continue; // continuar con la siguiente boleta del lote
+            // --- Consultar estado ---
+            const formConsulta = new FormData();
+            formConsulta.append("files", fs.createReadStream(CERT_PATH));
+            formConsulta.append(
+              "input",
+              JSON.stringify({
+                Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
+                RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
+                TrackId: trackId,
+                Ambiente: 1,
+                ServidorBoletaREST: 1,
+              })
+            );
+
+            const responseConsulta = await axios.post(
+              `${API_URL}/consulta/envio`,
+              formConsulta,
+              {
+                headers: {
+                  Authorization: API_KEY,
+                  ...formConsulta.getHeaders(),
+                },
+              }
+            );
+            const estado = responseConsulta.data?.estado || "PEND";
+            const xmlBase64 = Buffer.from(dteXml, "utf-8").toString("base64");
+
+            // --- Lógica de alertas de folios bajos ---
+            const [ultimaBoleta] = await db.query(
+              "SELECT alerta FROM boletas ORDER BY id DESC LIMIT 1"
+            );
+            const alertaAnterior = ultimaBoleta[0]?.alerta;
+            let alertaActual = false;
+            const totalFoliosRestantes = cafs
+              .slice(cafActualIndex)
+              .reduce(
+                (acc, c) =>
+                  acc + (c.hasta - Math.max(c.desde, siguienteFolio) + 1),
+                0
+              );
+
+            if (totalFoliosRestantes < ALERTA_MIN_FOLIOS) {
+              if (!alertaAnterior) {
+                console.log("Enviando alerta de folios bajos...");
+                await enviarAlertaCorreo(totalFoliosRestantes);
+                alertaActual = true;
+              } else {
+                alertaActual = true;
+                console.log("Alerta ya enviada anteriormente.");
+              }
             }
 
-            // --- Si no es un error de SimpleAPI, lo relanzamos ---
-            throw error;
+            // --- Guardar boleta en BD ---
+            await db.query(
+              "INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
+              [
+                siguienteFolio,
+                nombre,
+                precio,
+                fechaChile,
+                estado,
+                xmlBase64,
+                trackId,
+                alertaActual,
+                monto_total,
+                cantidad,
+              ]
+            );
+
+            console.log(
+              `Boleta ${siguienteFolio} guardada correctamente. Estado: ${estado}`
+            );
+          } catch (error) {
+            console.warn(
+              `Error SimpleAPI folio ${siguienteFolio}: ${error.message}`
+            );
+            // --- Boleta ficticia si falla SimpleAPI ---
+            const folioFicticio = await generarFolioFicticioUnico(db);
+            await db.query(
+              `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
+              [
+                folioFicticio,
+                nombre,
+                precio,
+                fechaChile,
+                "FICTICIA",
+                null,
+                null,
+                monto_total,
+                cantidad,
+              ]
+            );
+
+            // --- Enviar alerta SimpleAPI si no se ha enviado ---
+            const ahora = Date.now();
+            if (ahora - ultimaAlertaSimpleAPI > COOLDOWN_ALERTA_SIMPLE_API) {
+              console.log(
+                "Enviando alerta: SimpleAPI no responde o límite alcanzado..."
+              );
+              await enviarAlertaCorreoSimpleAPI(0);
+              ultimaAlertaSimpleAPI = ahora;
+            } else {
+              console.log(
+                "Alerta SimpleAPI ya enviada recientemente. No se reenvía."
+              );
+            }
           }
 
           siguienteFolio++;
