@@ -16,6 +16,8 @@ const CERT_PASS = process.env.CERT_PASS;
 const CAF_DIRECTORY = __dirname + "/../../caf/";
 const ALERTA_MIN_FOLIOS = 10000;
 let CAF_PATH;
+let ultimaAlertaSimpleAPI = 0; // timestamp (ms)
+const COOLDOWN_ALERTA_SIMPLE_API = 60 * 60 * 2000; // 2 horas
 
 // --- Función para crear payload según producto ---
 function crearPayload(producto, folio, cantidad = 1) {
@@ -668,8 +670,59 @@ exports.emitirBoleta = async (req, res) => {
       }
     })();
   } catch (err) {
-    console.error("Error al asignar folio:", err.message);
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+    console.error(
+      "Error en flujo de boleta:",
+      err.response?.data || err.message
+    );
+
+    // Detectar si el error proviene de SimpleAPI (por límite de peticiones)
+    const mensajeError = err.response?.data?.error || err.message;
+    const isSimpleApiLimit =
+      mensajeError?.toLowerCase().includes("limite") ||
+      mensajeError?.toLowerCase().includes("peticiones");
+
+    try {
+      // Generar boleta ficticia para no perder el registro
+      const folioFicticio = await generarFolioFicticioUnico(db);
+
+      await db.query(
+        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE)`,
+        [
+          folioFicticio,
+          nombre,
+          precio,
+          fechaChile,
+          "FICTICIA_ERROR_API",
+          null,
+          null,
+        ]
+      );
+
+      console.log(
+        "Boleta ficticia creada por error en SimpleAPI:",
+        folioFicticio
+      );
+    } catch (dbErr) {
+      console.error("Error al registrar boleta ficticia:", dbErr.message);
+    }
+
+    // Enviar notificación si es por límite de peticiones
+    if (isSimpleApiLimit) {
+      const ahora = Date.now();
+
+      if (ahora - ultimaAlertaSimpleAPI > COOLDOWN_ALERTA_SIMPLE_API) {
+        console.log(
+          "Enviando correo de alerta: límite de peticiones alcanzado..."
+        );
+        await enviarAlertaCorreoSimpleAPI(0);
+        ultimaAlertaSimpleAPI = ahora;
+      } else {
+        console.log(
+          "Alerta de SimpleAPI ya enviada recientemente. No se envía nuevo correo."
+        );
+      }
+    }
   }
 };
 
@@ -861,22 +914,92 @@ exports.emitirLoteBoletas = async (req, res) => {
           formGen.append("files2", fs.createReadStream(CAF_PATH));
           formGen.append("input", JSON.stringify(payload));
 
-          const responseGen = await axios.post(
-            `${API_URL}/dte/generar`,
-            formGen,
-            { headers: { Authorization: API_KEY, ...formGen.getHeaders() } }
-          );
+          try {
+            const responseGen = await axios.post(
+              `${API_URL}/dte/generar`,
+              formGen,
+              {
+                headers: { Authorization: API_KEY, ...formGen.getHeaders() },
+              }
+            );
 
-          const xml = responseGen.data;
-          const { FechaResolucion, NumeroResolucion } =
-            obtenerDatosResolucion(CAF_PATH);
+            const xml = responseGen.data;
+            const { FechaResolucion, NumeroResolucion } =
+              obtenerDatosResolucion(CAF_PATH);
 
-          dteXmls.push({
-            folio: siguienteFolio,
-            xml,
-            FechaResolucion,
-            NumeroResolucion,
-          });
+            dteXmls.push({
+              folio: siguienteFolio,
+              xml,
+              FechaResolucion,
+              NumeroResolucion,
+            });
+          } catch (error) {
+            console.warn(
+              `Error con SimpleAPI en folio ${siguienteFolio}: ${error.message}`
+            );
+
+            // Detectar caída o límite
+            const isSimpleApiError =
+              error.code === "ECONNRESET" ||
+              error.code === "ETIMEDOUT" ||
+              error.code === "ECONNREFUSED" ||
+              error.code === "EAI_AGAIN" || // DNS timeout
+              (error.response &&
+                (error.response.status >= 429 || // límite o error del servidor
+                  error.response.status >= 500));
+
+            if (isSimpleApiError) {
+              console.log(
+                `Error o límite de SimpleAPI (folio ${siguienteFolio}) — se guarda boleta ficticia`
+              );
+
+              await db.query(
+                `INSERT INTO boletas (
+                  folio, producto, precio, fecha, estado_sii, xml_base64, track_id,
+                  ficticia, alerta, monto_lote, cantidad_lote
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
+                [
+                  siguienteFolio,
+                  nombre,
+                  precio,
+                  fechaChile,
+                  "FICTICIA",
+                  null,
+                  null,
+                  monto_total,
+                  cantidad,
+                ]
+              );
+
+              // --- Enviar alerta por correo si no se ha enviado recientemente ---
+              const ahora = Date.now();
+              if (ahora - ultimaAlertaSimpleAPI > COOLDOWN_ALERTA_SIMPLE_API) {
+                console.log(
+                  "Enviando alerta: SimpleAPI no responde o alcanzó su límite..."
+                );
+                try {
+                  await enviarAlertaCorreoSimpleAPI(0);
+                  ultimaAlertaSimpleAPI = ahora;
+                } catch (mailError) {
+                  console.error(
+                    "Error al enviar correo de alerta SimpleAPI:",
+                    mailError
+                  );
+                }
+              } else {
+                console.log(
+                  "Alerta SimpleAPI ya enviada recientemente. No se reenvía."
+                );
+              }
+
+              siguienteFolio++;
+              continue; // continuar con la siguiente boleta del lote
+            }
+
+            // --- Si no es un error de SimpleAPI, lo relanzamos ---
+            throw error;
+          }
 
           siguienteFolio++;
         }
