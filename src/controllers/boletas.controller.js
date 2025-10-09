@@ -678,8 +678,15 @@ exports.emitirBoleta = async (req, res) => {
     // Detectar si el error proviene de SimpleAPI (por límite de peticiones)
     const mensajeError = err.response?.data?.error || err.message;
     const isSimpleApiLimit =
-      mensajeError?.toLowerCase().includes("limite") ||
-      mensajeError?.toLowerCase().includes("peticiones");
+      err.response?.status === 401
+        ? mensajeError?.toLowerCase().includes("alcanzado") ||
+          mensajeError?.toLowerCase().includes("consultas")
+        : err.code === "ECONNRESET" ||
+          err.code === "ETIMEDOUT" ||
+          err.code === "ECONNREFUSED" ||
+          err.code === "EAI_AGAIN" ||
+          (err.response &&
+            (err.response.status >= 429 || err.response.status >= 500));
 
     try {
       // Generar boleta ficticia para no perder el registro
