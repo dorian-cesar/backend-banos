@@ -45,7 +45,7 @@ exports.getAllUsers = async (req, res) => {
 
         // Datos con el mismo WHERE
         const [results] = await db.query(
-            `SELECT id, username, email, role
+            `SELECT id, username, email, role, is_active
          FROM users
          ${whereSQL}
          ORDER BY id DESC
@@ -65,7 +65,7 @@ exports.getUserById = async (req, res) => {
     const { id } = req.params;
 
     try {
-        const [rows] = await db.query('SELECT id, username, email, role FROM users WHERE id = ?', [id]);
+        const [rows] = await db.query('SELECT id, username, email, role, is_active FROM users WHERE id = ?', [id]);
         if (rows.length === 0) {
             return res.status(404).json({ error: 'Usuario no encontrado' });
         }
@@ -92,8 +92,9 @@ exports.getRoles = async (req, res) => {
 
 // Crear nuevo usuario
 exports.createUser = async (req, res) => {
-    const { username, email, password, role } = req.body;
+    const { username, email, password, role, is_active } = req.body;
 
+    // Validaciones básicas
     if (!username || !email || !password || !role) {
         return res.status(400).json({ error: 'Todos los campos son requeridos' });
     }
@@ -106,17 +107,25 @@ exports.createUser = async (req, res) => {
         return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
     }
 
-    const [existing] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
-    if (existing.length > 0) {
-        return res.status(409).json({ error: 'El email ya está en uso' });
-    }
-
     try {
+        // Verificar si el correo ya está en uso
+        const [existing] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
+        if (existing.length > 0) {
+            return res.status(409).json({ error: 'El email ya está en uso' });
+        }
+
+        // Encriptar la contraseña
         const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Convertir el estado a valor lógico/numérico
+        const activeValue = is_active === true || is_active === 1 ? 1 : 0;
+
+        // Insertar el nuevo usuario incluyendo el campo is_active
         const [result] = await db.query(
-            'INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)',
-            [username, email, hashedPassword, role],
+            'INSERT INTO users (username, email, password, role, is_active) VALUES (?, ?, ?, ?, ?)',
+            [username, email, hashedPassword, role.toLowerCase(), activeValue]
         );
+
         res.status(201).json({ message: 'Usuario creado', id: result.insertId });
     } catch (error) {
         console.error('Error al crear usuario:', error);
@@ -127,7 +136,7 @@ exports.createUser = async (req, res) => {
 // Actualizar usuario
 exports.updateUser = async (req, res) => {
     const { id } = req.params;
-    const { username, email, password, role } = req.body;
+    const { username, email, password, role, is_active } = req.body;
 
     if (!username || !email || !role) {
         return res.status(400).json({ error: 'username, email y role son requeridos' });
@@ -142,15 +151,20 @@ exports.updateUser = async (req, res) => {
     }
 
     try {
-        // Verificar si el email cambió y si está en uso por otro
-        const [existingEmailRows] = await db.query('SELECT id FROM users WHERE email = ? AND id != ?', [email, id]);
+        // Verificar si el email cambió y si está en uso por otro usuario
+        const [existingEmailRows] = await db.query(
+            'SELECT id FROM users WHERE email = ? AND id != ?',
+            [email, id]
+        );
         if (existingEmailRows.length > 0) {
             return res.status(409).json({ error: 'El email ya está en uso por otro usuario' });
         }
 
-        let updateQuery = 'UPDATE users SET username = ?, email = ?, role = ?';
-        const values = [username, email, role.toLowerCase()];
+        // Base del query
+        let updateQuery = 'UPDATE users SET username = ?, email = ?, role = ?, is_active = ?';
+        const values = [username, email, role.toLowerCase(), is_active === true || is_active === 1 ? 1 : 0];
 
+        // Si se envía contraseña, la actualizamos también
         if (password) {
             const hashedPassword = await bcrypt.hash(password, 10);
             updateQuery += ', password = ?';
@@ -165,7 +179,7 @@ exports.updateUser = async (req, res) => {
             return res.status(404).json({ error: 'Usuario no encontrado' });
         }
 
-        res.json({ message: 'Usuario actualizado' });
+        res.json({ message: 'Usuario actualizado correctamente' });
     } catch (error) {
         console.error('Error al actualizar usuario:', error);
         res.status(500).json({ error: 'Error interno del servidor' });

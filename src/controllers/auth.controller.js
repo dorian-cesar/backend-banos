@@ -25,6 +25,11 @@ exports.loginAdmin = async (req, res) => {
 
         const user = rows[0];
 
+        // 🔒 Verificar si la cuenta está activa
+        if (!user.is_active) {
+            return res.status(403).json({ error: 'La cuenta está inactiva. Contacte al administrador.' });
+        }
+
         const match = await bcrypt.compare(password, user.password);
         if (!match) {
             return res.status(401).json({ error: 'Credenciales inválidas' });
@@ -49,11 +54,12 @@ exports.loginAdmin = async (req, res) => {
                 id: user.id,
                 username: user.username,
                 email: user.email,
-                role: user.role
+                role: user.role,
+                is_active: !!user.is_active
             }
         });
     } catch (error) {
-        console.error('Error en login:', error);
+        console.error('Error en loginAdmin:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 };
@@ -74,6 +80,11 @@ exports.loginUser = async (req, res) => {
 
         const user = rows[0];
 
+        // 🔒 Verificar si la cuenta está activa
+        if (!user.is_active) {
+            return res.status(403).json({ error: 'La cuenta está inactiva. Contacte al administrador.' });
+        }
+
         const match = await bcrypt.compare(password, user.password);
         if (!match) {
             return res.status(401).json({ error: 'Credenciales inválidas' });
@@ -92,11 +103,12 @@ exports.loginUser = async (req, res) => {
                 id: user.id,
                 username: user.username,
                 email: user.email,
-                role: user.role
+                role: user.role,
+                is_active: !!user.is_active
             }
         });
     } catch (error) {
-        console.error('Error en login:', error);
+        console.error('Error en loginUser:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 };
@@ -125,7 +137,6 @@ exports.forgot = async (req, res) => {
 
         return res.json({ ok: true, message: GENERIC_MSG });
     } catch (err) {
-        // Para ambiente de DEV, devuelve el detalle; en PROD, deja mensaje genérico y loguea
         console.error('Error en forgot:', err);
         return res.status(500).json({ ok: false, message: 'No se pudo enviar el correo. Reintente más tarde.' });
     }
@@ -135,12 +146,10 @@ exports.forgot = async (req, res) => {
 exports.reset = async (req, res) => {
     const { token, newPassword } = req.body;
 
-    if (!token) {
-        return res.status(400).json({ ok: false, message: 'token inválido' });
-    }
     if (!token || !newPassword) {
         return res.status(400).json({ ok: false, message: 'Datos inválidos' });
     }
+
     if (String(newPassword).length < 6) {
         return res.status(400).json({ ok: false, message: 'La contraseña debe tener al menos 6 caracteres' });
     }
@@ -172,7 +181,6 @@ exports.reset = async (req, res) => {
         return res.json({ ok: true, message: 'Contraseña actualizada' });
     } catch (err) {
         console.error('Error en reset:', err);
-        // jwt.verify lanza en expiración o token mal formado
         return res.status(400).json({ ok: false, message: 'Token inválido o expirado (catch)' });
     }
 };
