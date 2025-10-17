@@ -130,7 +130,7 @@ exports.obtenerFoliosRestantes = async (req, res) => {
     } else {
       try {
         const [rows] = await db.query(
-          `SELECT folio FROM boletas ORDER BY id DESC LIMIT 1`
+          `SELECT folio FROM boletas_calama ORDER BY id DESC LIMIT 1`
         );
         if (rows.length && rows[0].folio != null) {
           ultimoFolio = Number(rows[0].folio);
@@ -301,11 +301,11 @@ async function obtenerSiguienteFolio() {
   try {
     // --- Obtener último folio CON CONVERSIÓN A NÚMERO ---
     // const [rows] = await db.query(
-    //   `SELECT MAX(folio) as ultimo FROM boletas WHERE (ficticia IS NULL OR ficticia = 0) AND (estado_sii IS NULL OR estado_sii != 'RSC') AND folio NOT REGEXP '-[0-9]+$'`
+    //   `SELECT MAX(folio) as ultimo FROM boletas_calama WHERE (ficticia IS NULL OR ficticia = 0) AND (estado_sii IS NULL OR estado_sii != 'RSC') AND folio NOT REGEXP '-[0-9]+$'`
     // );
     const [rows] = await db.query(`
       SELECT MAX(CAST(SUBSTRING_INDEX(folio, '-', 1) AS UNSIGNED)) AS ultimo
-      FROM boletas
+      FROM boletas_calama
       WHERE (ficticia IS NULL OR ficticia = 0)
     `);
     // Conversión explícita a número
@@ -468,7 +468,7 @@ exports.emitirBoleta = async (req, res) => {
       console.log("No hay folios disponibles. Boleta ficticia:", folioFicticio);
 
       await db.query(
-        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
+        `INSERT INTO boletas_calama (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
            VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE)`,
         [folioFicticio, nombre, precio, fechaChile, "FICTICIA", null, null]
       );
@@ -613,7 +613,7 @@ exports.emitirBoleta = async (req, res) => {
 
         // Evaluar alerta
         const [ultimaBoleta] = await db.query(
-          `SELECT folio, alerta FROM boletas ORDER BY id DESC LIMIT 1`
+          `SELECT folio, alerta FROM boletas_calama ORDER BY id DESC LIMIT 1`
         );
         const alertaAnterior = ultimaBoleta[0]?.alerta;
         let alertaActual = false;
@@ -636,7 +636,7 @@ exports.emitirBoleta = async (req, res) => {
 
         // Guardar boleta en DB
         await db.query(
-          `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
+          `INSERT INTO boletas_calama (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
           [
             folioParaGuardar,
@@ -693,7 +693,7 @@ exports.emitirBoleta = async (req, res) => {
       const folioFicticio = await generarFolioFicticioUnico(db);
 
       await db.query(
-        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
+        `INSERT INTO boletas_calama (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
        VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE)`,
         [
           folioFicticio,
@@ -773,7 +773,7 @@ exports.emitirLoteBoletas = async (req, res) => {
 
       // Insertar primer folio
       await db.query(
-        `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
+        `INSERT INTO boletas_calama (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
           VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
         [
           folioParaRespuesta,
@@ -792,7 +792,7 @@ exports.emitirLoteBoletas = async (req, res) => {
       for (let i = 1; i < cantidad; i++) {
         const folioFicticio = await generarFolioFicticioUnico(db);
         await db.query(
-          `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
+          `INSERT INTO boletas_calama (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
             VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
           [
             folioFicticio,
@@ -838,7 +838,7 @@ exports.emitirLoteBoletas = async (req, res) => {
 
     // --- Obtener último folio usado ---
     const [rows] = await db.query(
-      "SELECT MAX(CAST(SUBSTRING_INDEX(folio, '-', 1) AS UNSIGNED)) AS ultimo FROM boletas WHERE (ficticia IS NULL OR ficticia = 0)"
+      "SELECT MAX(CAST(SUBSTRING_INDEX(folio, '-', 1) AS UNSIGNED)) AS ultimo FROM boletas_calama WHERE (ficticia IS NULL OR ficticia = 0)"
     );
     let siguienteFolio = Number(rows[0]?.ultimo) + 1 || 1;
 
@@ -882,7 +882,7 @@ exports.emitirLoteBoletas = async (req, res) => {
               for (let j = 0; j < faltantes; j++) {
                 const folioFicticio = await generarFolioFicticioUnico(db);
                 await db.query(
-                  `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
+                  `INSERT INTO boletas_calama (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
                     VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
                   [
                     folioFicticio,
@@ -1005,7 +1005,7 @@ exports.emitirLoteBoletas = async (req, res) => {
 
             // --- Lógica de alertas de folios bajos ---
             const [ultimaBoleta] = await db.query(
-              "SELECT alerta FROM boletas ORDER BY id DESC LIMIT 1"
+              "SELECT alerta FROM boletas_calama ORDER BY id DESC LIMIT 1"
             );
             const alertaAnterior = ultimaBoleta[0]?.alerta;
             let alertaActual = false;
@@ -1030,7 +1030,7 @@ exports.emitirLoteBoletas = async (req, res) => {
 
             // --- Guardar boleta en BD ---
             await db.query(
-              "INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
+              "INSERT INTO boletas_calama (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
               [
                 siguienteFolio,
                 nombre,
@@ -1055,7 +1055,7 @@ exports.emitirLoteBoletas = async (req, res) => {
             // --- Boleta ficticia si falla SimpleAPI ---
             const folioFicticio = await generarFolioFicticioUnico(db);
             await db.query(
-              `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
+              `INSERT INTO boletas_calama (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
                  VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
               [
                 folioFicticio,
@@ -1175,7 +1175,7 @@ exports.emitirLoteBoletas = async (req, res) => {
 
         // --- Alerta folios bajos ---
         const [ultimaBoleta] = await db.query(
-          "SELECT alerta FROM boletas ORDER BY id DESC LIMIT 1"
+          "SELECT alerta FROM boletas_calama ORDER BY id DESC LIMIT 1"
         );
         const alertaAnterior = ultimaBoleta[0]?.alerta;
         let alertaActual = false;
@@ -1195,7 +1195,7 @@ exports.emitirLoteBoletas = async (req, res) => {
         // --- Guardar todas las boletas con folios únicos ---
         for (const { folio } of dteXmls) {
           await db.query(
-            "INSERT INTO boletas (folio, folio_padre, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
+            "INSERT INTO boletas_calama (folio, folio_padre, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
             [
               folio,
               null,
@@ -1302,7 +1302,7 @@ async function generarFolioFicticioUnico(db) {
 
     // Verificar en la base si ya existe ese folio
     const [rows] = await db.query(
-      "SELECT id FROM boletas WHERE folio = ? LIMIT 1",
+      "SELECT id FROM boletas_calama WHERE folio = ? LIMIT 1",
       [folio]
     );
     existe = rows.length > 0;
@@ -1313,7 +1313,7 @@ async function generarFolioFicticioUnico(db) {
 
 // exports.borrarTodasLasBoletas = async (req, res) => {
 //   try {
-//     const [result] = await db.query("DELETE FROM boletas");
+//     const [result] = await db.query("DELETE FROM boletas_calama");
 
 //     res.status(200).json({
 //       message: `Se eliminaron ${result.affectedRows} boletas`,
