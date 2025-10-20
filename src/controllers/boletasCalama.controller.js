@@ -1,7 +1,7 @@
 const axios = require("axios");
 const FormData = require("form-data");
 const fs = require("fs");
-const db = require("../config/db.config");
+const db = require("../config/db_calama.config");
 const path = require("path");
 const nodemailer = require("nodemailer");
 require("dotenv").config();
