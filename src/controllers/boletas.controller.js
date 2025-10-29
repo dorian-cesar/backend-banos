@@ -14,7 +14,7 @@ const EMISOR_DV = process.env.EMISOR_DV;
 const CERT_PATH = __dirname + "/../../certificado/certificado.pfx";
 const CERT_PASS = process.env.CERT_PASS;
 const CAF_DIRECTORY = __dirname + "/../../caf/";
-const ALERTA_MIN_FOLIOS = 15000;
+const ALERTA_MIN_FOLIOS = 1000;
 let CAF_PATH;
 let ultimaAlertaSimpleAPI = 0; // timestamp (ms)
 const COOLDOWN_ALERTA_SIMPLE_API = 60 * 60 * 2000; // 2 horas
@@ -200,7 +200,7 @@ exports.solicitarNuevosFolios = async (req, res) => {
         RutCertificado: process.env.CERT_RUT,
         Password: CERT_PASS,
         RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
-        Ambiente: 1,
+        Ambiente: 0,
       })
     );
     data.append("files", fs.createReadStream(CERT_PATH));
@@ -560,7 +560,7 @@ exports.emitirBoleta = async (req, res) => {
           "input",
           JSON.stringify({
             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-            Ambiente: 1,
+            Ambiente: 0,
             Tipo: 2,
           })
         );
@@ -586,7 +586,7 @@ exports.emitirBoleta = async (req, res) => {
             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
             RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
             TrackId: trackId,
-            Ambiente: 1,
+            Ambiente: 0,
             ServidorBoletaREST: 1,
           })
         );
@@ -962,7 +962,7 @@ exports.emitirLoteBoletas = async (req, res) => {
               "input",
               JSON.stringify({
                 Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-                Ambiente: 1,
+                Ambiente: 0,
                 Tipo: 2,
               })
             );
@@ -985,7 +985,7 @@ exports.emitirLoteBoletas = async (req, res) => {
                 Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
                 RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
                 TrackId: trackId,
-                Ambiente: 1,
+                Ambiente: 0,
                 ServidorBoletaREST: 1,
               })
             );
@@ -1132,7 +1132,7 @@ exports.emitirLoteBoletas = async (req, res) => {
           "input",
           JSON.stringify({
             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-            Ambiente: 1,
+            Ambiente: 0,
             Tipo: 2,
           })
         );
@@ -1157,7 +1157,7 @@ exports.emitirLoteBoletas = async (req, res) => {
             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
             RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
             TrackId: trackId,
-            Ambiente: 1,
+            Ambiente: 0,
             ServidorBoletaREST: 1,
           })
         );
