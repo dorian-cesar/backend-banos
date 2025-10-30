@@ -25,7 +25,7 @@ async function consultarEstadoDTE(trackId) {
         Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
         RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
         TrackId: trackId,
-        Ambiente: 0,
+        Ambiente: 1,
         ServidorBoletaREST: 1,
       })
     );
@@ -63,7 +63,7 @@ async function consultarEstadoDTE(trackId) {
 
 // --- Ejemplo de uso ---
 (async () => {
-  const trackId = "25446638"; // Reemplaza con tu track_id
+  const trackId = "19345102654"; // Reemplaza con tu track_id
   const estado = await consultarEstadoDTE(trackId);
   console.log(`Estado final del DTE (${trackId}):`, estado);
 })();
