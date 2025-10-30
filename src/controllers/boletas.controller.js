@@ -262,7 +262,8 @@ async function enviarAlertaCorreo(totalFoliosRestantes) {
 
     const info = await transporter.sendMail({
       from: `"Sistema Boletas" <${process.env.SMTP_USER}>`,
-      to: "dwigodski@wit.la, epaz@wit.la, dgonzalez@wit.la",
+      // to: "dwigodski@wit.la, epaz@wit.la, dgonzalez@wit.la",
+      to: "dwigodski@wit.la, dgonzalez@wit.la",
       subject: "🚨 Alerta: folios disponibles bajos!",
       text: `Quedan solo ${totalFoliosRestantes} folios disponibles en el sistema de boletas de Baño y Duchas en el Terminal.\n Por favor solicita nuevos folios lo antes posible.\n Solicita la obtención de nuevos folios con sus credenciales aquí: https://mantenedor-banios.netlify.app/dashboard/folios\n`,
     });
@@ -285,7 +286,8 @@ async function enviarAlertaCorreoSimpleAPI(peticionesRestantes) {
 
     const info = await transporter.sendMail({
       from: `"Sistema Boletas" <${process.env.SMTP_USER}>`,
-      to: "dwigodski@wit.la, epaz@wit.la, dgonzalez@wit.la",
+      // to: "dwigodski@wit.la, epaz@wit.la, dgonzalez@wit.la",
+      to: "dwigodski@wit.la, dgonzalez@wit.la",
       subject: "🚨 Alerta: peticiones disponibles bajas en SimpleAPI",
       text: `Quedan solo ${peticionesRestantes} peticiones disponibles en tu suscripción de SimpleAPI.\nPor favor verifica tu límite y solicita renovación si es necesario.`,
     });
