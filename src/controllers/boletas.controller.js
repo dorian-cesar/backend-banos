@@ -742,6 +742,13 @@ exports.emitirBoleta = async (req, res) => {
 exports.emitirLoteBoletas = async (req, res) => {
   let { nombre, precio, cantidad, monto_total } = req.body;
 
+  nombre = nombre
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ñ/g, "n")
+    .replace(/Ñ/g, "N")
+    .toLowerCase();
+
   precio = Number(precio);
   cantidad = Number(cantidad);
   monto_total = Number(monto_total);
