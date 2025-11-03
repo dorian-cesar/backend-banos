@@ -32,6 +32,11 @@ exports.getAllMovimientos = async (req, res) => {
             params.push(req.query.id_servicio);
         }
 
+        if (req.query.id_aperturas_cierres) {
+            filtros.push('m.id_aperturas_cierres = ?');
+            params.push(req.query.id_aperturas_cierres);
+        }
+
         if (req.query.medio_pago) {
             filtros.push('m.medio_pago = ?');
             params.push(req.query.medio_pago);
