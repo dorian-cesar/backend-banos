@@ -449,7 +449,7 @@ function obtenerFechaHoraChile() {
   return `${anio}-${mes}-${dia} ${hora}`;
 }
 
-const fechaChile = obtenerFechaHoraChile();
+// const fechaChile = obtenerFechaHoraChile();
 
 // --- Endpoint emitirBoleta con flujo principal ---
 exports.emitirBoleta = async (req, res) => {
@@ -466,7 +466,7 @@ exports.emitirBoleta = async (req, res) => {
     if (!folioAsignado) {
       // Generar folio ficticio con formato ###-####
       const folioFicticio = await generarFolioFicticioUnico(db);
-
+      const fechaChile = obtenerFechaHoraChile();
       console.log("No hay folios disponibles. Boleta ficticia:", folioFicticio);
 
       await db.query(
@@ -636,6 +636,8 @@ exports.emitirBoleta = async (req, res) => {
           alertaActual = false;
         }
 
+        const fechaChile = obtenerFechaHoraChile();
+
         // Guardar boleta en DB
         await db.query(
           `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
@@ -693,6 +695,7 @@ exports.emitirBoleta = async (req, res) => {
     try {
       // Generar boleta ficticia para no perder el registro
       const folioFicticio = await generarFolioFicticioUnico(db);
+      const fechaChile = obtenerFechaHoraChile();
 
       await db.query(
         `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
@@ -772,6 +775,7 @@ exports.emitirLoteBoletas = async (req, res) => {
 
       // Primer folio ficticio para la respuesta
       folioParaRespuesta = await generarFolioFicticioUnico(db);
+      const fechaChile = obtenerFechaHoraChile();
 
       // Insertar primer folio
       await db.query(
@@ -867,6 +871,8 @@ exports.emitirLoteBoletas = async (req, res) => {
       ficticia: false,
       folio: folioParaRespuesta,
     });
+
+    const fechaChile = obtenerFechaHoraChile();
 
     // --- Flujo asíncrono del lote ---
     (async () => {
@@ -1030,6 +1036,8 @@ exports.emitirLoteBoletas = async (req, res) => {
               }
             }
 
+            const fechaChile = obtenerFechaHoraChile();
+
             // --- Guardar boleta en BD ---
             await db.query(
               "INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
@@ -1056,6 +1064,7 @@ exports.emitirLoteBoletas = async (req, res) => {
             );
             // --- Boleta ficticia si falla SimpleAPI ---
             const folioFicticio = await generarFolioFicticioUnico(db);
+            const fechaChile = obtenerFechaHoraChile();
             await db.query(
               `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
                  VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
@@ -1193,6 +1202,8 @@ exports.emitirLoteBoletas = async (req, res) => {
           if (!alertaAnterior) await enviarAlertaCorreo(totalFoliosRestantes);
           alertaActual = true;
         }
+
+        const fechaChile = obtenerFechaHoraChile();
 
         // --- Guardar todas las boletas con folios únicos ---
         for (const { folio } of dteXmls) {
