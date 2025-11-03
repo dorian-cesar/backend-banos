@@ -727,7 +727,7 @@ exports.emitirBoleta = async (req, res) => {
         console.log(
           "Enviando correo de alerta: límite de peticiones alcanzado..."
         );
-        await enviarAlertaCorreoSimpleAPI(0);
+        // await enviarAlertaCorreoSimpleAPI(0);
         ultimaAlertaSimpleAPI = ahora;
       } else {
         console.log(
@@ -1087,7 +1087,7 @@ exports.emitirLoteBoletas = async (req, res) => {
               console.log(
                 "Enviando alerta: SimpleAPI no responde o límite alcanzado..."
               );
-              await enviarAlertaCorreoSimpleAPI(0);
+              // await enviarAlertaCorreoSimpleAPI(0);
               ultimaAlertaSimpleAPI = ahora;
             } else {
               console.log(
