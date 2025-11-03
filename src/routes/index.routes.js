@@ -16,8 +16,6 @@ const boletasCalamaRoutes = require("./boletasCalama.routes");
 
 //sin autenticacion
 router.use("/auth", authRoutes);
-router.use("/boletas", boletasRoutes);
-router.use("/boletas-calama", boletasCalamaRoutes);
 //router.use('/resumenCajas', helpersController.getResumenPorCaja);
 
 //autenticados
@@ -27,5 +25,7 @@ router.use("/movimientos", authenticateToken, movimientosRoutes);
 router.use("/cajas", authenticateToken, cajasRoutes);
 router.use("/aperturas-cierres", authenticateToken, aperturasCierresRoutes);
 router.use("/helpers", authenticateToken, helpersRoutes);
+router.use("/boletas", boletasRoutes);
+router.use("/boletas-calama", boletasCalamaRoutes);
 
 module.exports = router;
