@@ -181,6 +181,7 @@ exports.getResumenPorCaja = async (req, res) => {
     const { fecha } = req.query; // "YYYY-MM-DD" opcional
     const fechaFiltro = fecha || null;
 
+    // 1) Por-sesión (igual que antes, pero separando retiros)
     const [rows] = await db.query(
       `
       SELECT
@@ -265,9 +266,78 @@ exports.getResumenPorCaja = async (req, res) => {
       ]
     );
 
-    res.json(rows);
+    // 2) Totales del DÍA (todos los movimientos de la fecha, sin importar sesión)
+    const [totDiaRows] = await db.query(
+      `
+      SELECT
+        COALESCE(SUM(CASE WHEN id_servicio <> 999 AND medio_pago = 'EFECTIVO' THEN monto END), 0) AS efectivo,
+        COALESCE(SUM(CASE WHEN id_servicio <> 999 AND medio_pago = 'TARJETA'  THEN monto END), 0) AS tarjeta,
+        COALESCE(SUM(CASE WHEN id_servicio <> 999 THEN monto END), 0) AS total,
+        COALESCE(SUM(CASE WHEN id_servicio = 999 THEN monto END), 0) AS retiros,
+        COUNT(*) AS transacciones
+      FROM movimientos
+      WHERE fecha = COALESCE(?, CURDATE())
+      `,
+      [fechaFiltro]
+    );
+    const totalesDia = totDiaRows?.[0] || {
+      efectivo: 0,
+      tarjeta: 0,
+      total: 0,
+      retiros: 0,
+      transacciones: 0,
+    };
+
+    // Mapear resultados (solo cajas activas, por seguridad)
+    const cajas = rows
+      .filter((r) => r.estado_caja !== "inactiva")
+      .map((r) => ({
+        id: r.id,
+        numero_caja: r.numero_caja,
+        nombre: r.nombre,
+        ubicacion: r.ubicacion,
+        estado_caja: r.estado_caja,
+        descripcion: r.descripcion,
+        estado_apertura: r.estado_apertura,
+        apertura: r.estado_apertura
+          ? {
+              usuario: r.apertura_usuario_id
+                ? {
+                    id: r.apertura_usuario_id,
+                    nombre: r.apertura_usuario_nombre,
+                    email: r.apertura_usuario_email,
+                  }
+                : null,
+              fecha: r.apertura_fecha,
+              hora: r.apertura_hora,
+            }
+          : null,
+        cierre:
+          r.estado_apertura === "cerrada"
+            ? {
+                fecha: r.cierre_fecha || null,
+                hora: r.cierre_hora || null,
+              }
+            : null,
+        monto_inicial: r.monto_inicial ?? 0,
+        efectivo: r.efectivo,
+        tarjeta: r.tarjeta,
+        total: r.total,
+        retiros: r.retiros,
+        transacciones: r.transacciones,
+        primera_transaccion: r.primera_transaccion,
+        ultima_transaccion: r.ultima_transaccion,
+        fecha_primera_transaccion: r.fecha_primera_transaccion,
+        fecha_ultima_transaccion: r.fecha_ultima_transaccion,
+      }));
+
+    res.json({
+      fecha: fecha || null,
+      cajas,
+      totales: totalesDia,
+    });
   } catch (error) {
-    console.error("Error getResumenPorCaja:", error);
+    console.error("Error en getResumenPorCaja:", error.message);
     res.status(500).json({ error: "Error al obtener resumen por caja" });
   }
 };
