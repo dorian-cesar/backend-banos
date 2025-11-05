@@ -191,55 +191,8 @@ exports.getResumenPorCaja = async (req, res) => {
           c.ubicacion,
           c.estado AS estado_caja,
           c.descripcion,
-
-          ac.estado AS estado_apertura,
-
-          ua.id       AS apertura_usuario_id,
-          ua.username AS apertura_usuario_nombre,
-          ua.email    AS apertura_usuario_email,
-
-          ac.fecha_apertura AS apertura_fecha,
-          ac.hora_apertura  AS apertura_hora,
-          ac.monto_inicial  AS monto_inicial,
-
-          ac.fecha_cierre    AS cierre_fecha,
-          ac.hora_cierre     AS cierre_hora,
-
-          COALESCE(SUM(CASE 
-            WHEN m.id_servicio <> 999 AND m.medio_pago = 'EFECTIVO' 
-                AND m.fecha = COALESCE(?, m.fecha)
-            THEN m.monto END), 0) AS efectivo,
-
-          COALESCE(SUM(CASE 
-            WHEN m.id_servicio <> 999 AND m.medio_pago = 'TARJETA' 
-                AND m.fecha = COALESCE(?, m.fecha)
-            THEN m.monto END), 0) AS tarjeta,
-
-          COALESCE(SUM(CASE 
-            WHEN m.id_servicio <> 999 
-                AND m.fecha = COALESCE(?, m.fecha)
-            THEN m.monto END), 0) AS total,
-
-          COALESCE(SUM(CASE 
-            WHEN m.id_servicio = 999 
-                AND m.fecha = COALESCE(?, m.fecha)
-            THEN m.monto END), 0) AS retiros,
-
-          COALESCE(SUM(CASE 
-            WHEN m.id_servicio <> 999 
-                AND m.fecha = COALESCE(?, m.fecha)
-            THEN 1 END), 0) AS transacciones,
-
-          MIN(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.hora  END) AS primera_transaccion,
-          MAX(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.hora  END) AS ultima_transaccion,
-          MIN(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.fecha END) AS fecha_primera_transaccion,
-          MAX(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.fecha END) AS fecha_ultima_transaccion
-
+          ...
         FROM cajas c
-
-        -- Excluir cajas inactivas
-        WHERE c.estado <> 'inactiva'
-
         LEFT JOIN (
           SELECT *
           FROM (
@@ -256,14 +209,11 @@ exports.getResumenPorCaja = async (req, res) => {
             FROM aperturas_cierres ac
           ) z
           WHERE z.rn = 1
-        ) ac
-          ON ac.numero_caja = c.numero_caja
+        ) ac ON ac.numero_caja = c.numero_caja
+        LEFT JOIN users ua ON ua.id = ac.id_usuario_apertura
+        LEFT JOIN movimientos m ON m.id_aperturas_cierres = ac.id
 
-        LEFT JOIN users ua
-          ON ua.id = ac.id_usuario_apertura
-
-        LEFT JOIN movimientos m
-          ON m.id_aperturas_cierres = ac.id
+        WHERE c.estado <> 'inactiva'
 
         GROUP BY
           c.id, c.numero_caja, c.nombre, c.ubicacion, c.estado, c.descripcion,
