@@ -240,7 +240,6 @@ exports.getResumenPorCaja = async (req, res) => {
       LEFT JOIN movimientos m
         ON m.id_aperturas_cierres = ac.id
 
-      -- Excluir cajas inactivas
       WHERE c.estado <> 'inactiva'
 
       GROUP BY
