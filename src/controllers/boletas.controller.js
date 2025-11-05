@@ -586,7 +586,7 @@ exports.emitirBoleta = async (req, res) => {
         const dteXml = responseGen.data;
 
         // console.log("XML generado (primeras 500 chars):");
-        console.log(dteXml.substring(0, 500));
+        // console.log(dteXml.substring(0, 500));
 
         // Generar Sobre
         const { FechaResolucion, NumeroResolucion } =
