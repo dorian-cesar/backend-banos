@@ -1,18 +1,17 @@
-const db = require('../../config/db.config');
+const db = require("../../config/db.config");
 
 exports.getMetadata = async (req, res) => {
   try {
-
     const {
-      usuarios = '1',
-      servicios = '1',
-      cajas = '1',
-      mediosPago = '1'
+      usuarios = "1",
+      servicios = "1",
+      cajas = "1",
+      mediosPago = "1",
     } = req.query;
 
     const result = {};
 
-    if (usuarios === '1') {
+    if (usuarios === "1") {
       const [usuariosData] = await db.query(`
         SELECT DISTINCT u.id, u.username AS nombre 
         FROM movimientos m
@@ -22,7 +21,7 @@ exports.getMetadata = async (req, res) => {
       result.usuarios = usuariosData;
     }
 
-    if (servicios === '1') {
+    if (servicios === "1") {
       const [serviciosData] = await db.query(`
         SELECT DISTINCT s.id, s.nombre 
         FROM movimientos m
@@ -32,7 +31,7 @@ exports.getMetadata = async (req, res) => {
       result.servicios = serviciosData;
     }
 
-    if (cajas === '1') {
+    if (cajas === "1") {
       const [cajasData] = await db.query(`
         SELECT DISTINCT c.numero_caja, c.nombre 
         FROM movimientos m
@@ -42,14 +41,14 @@ exports.getMetadata = async (req, res) => {
       result.cajas = cajasData;
     }
 
-    if (mediosPago === '1') {
-      result.mediosPago = ['EFECTIVO', 'TARJETA'];
+    if (mediosPago === "1") {
+      result.mediosPago = ["EFECTIVO", "TARJETA"];
     }
 
     res.json(result);
   } catch (error) {
-    console.error('Error en getMetadata:', error.message);
-    res.status(500).json({ error: 'Error al obtener metadata' });
+    console.error("Error en getMetadata:", error.message);
+    res.status(500).json({ error: "Error al obtener metadata" });
   }
 };
 
@@ -96,7 +95,10 @@ exports.getResumenMetadata = async (req, res) => {
       FROM cajas
       WHERE estado = 'inactiva'
     `);
-    result.cajasEstado = { activas: Number(activas || 0), inactivas: Number(inactivas || 0) };
+    result.cajasEstado = {
+      activas: Number(activas || 0),
+      inactivas: Number(inactivas || 0),
+    };
 
     // (Opcional) cajas abiertas hoy (tabla aperturas_cierres)
     const [[{ abiertas_hoy }]] = await db.query(`
@@ -112,8 +114,12 @@ exports.getResumenMetadata = async (req, res) => {
       GROUP BY medio_pago
     `);
     result.distribucionMediosPago = {
-      EFECTIVO: Number(conteoPorMedio.find(r => r.medio_pago === 'EFECTIVO')?.total || 0),
-      TARJETA: Number(conteoPorMedio.find(r => r.medio_pago === 'TARJETA')?.total || 0),
+      EFECTIVO: Number(
+        conteoPorMedio.find((r) => r.medio_pago === "EFECTIVO")?.total || 0
+      ),
+      TARJETA: Number(
+        conteoPorMedio.find((r) => r.medio_pago === "TARJETA")?.total || 0
+      ),
     };
 
     // Ganancias totales por medio
@@ -122,8 +128,12 @@ exports.getResumenMetadata = async (req, res) => {
       FROM movimientos
       GROUP BY medio_pago
     `);
-    const efectivoTotal = Number(montosPorMedio.find(r => r.medio_pago === 'EFECTIVO')?.total_monto || 0);
-    const tarjetaTotal = Number(montosPorMedio.find(r => r.medio_pago === 'TARJETA')?.total_monto || 0);
+    const efectivoTotal = Number(
+      montosPorMedio.find((r) => r.medio_pago === "EFECTIVO")?.total_monto || 0
+    );
+    const tarjetaTotal = Number(
+      montosPorMedio.find((r) => r.medio_pago === "TARJETA")?.total_monto || 0
+    );
     result.totalGanancias = {
       EFECTIVO: efectivoTotal,
       TARJETA: tarjetaTotal,
@@ -138,24 +148,33 @@ exports.getResumenMetadata = async (req, res) => {
         WHERE ${whereSql}
         GROUP BY medio_pago
       `);
-      const e = Number(rows.find(r => r.medio_pago === 'EFECTIVO')?.total_monto || 0);
-      const t = Number(rows.find(r => r.medio_pago === 'TARJETA')?.total_monto || 0);
+      const e = Number(
+        rows.find((r) => r.medio_pago === "EFECTIVO")?.total_monto || 0
+      );
+      const t = Number(
+        rows.find((r) => r.medio_pago === "TARJETA")?.total_monto || 0
+      );
       return { EFECTIVO: e, TARJETA: t, TOTAL: e + t };
     };
 
     // Ganancias por rangos (SIEMPRE en movimientos)
     result.totalGananciasHoy = await getGananciasPorRango(`fecha = CURDATE()`);
-    result.totalGananciasSemana = await getGananciasPorRango(`YEARWEEK(fecha, 1) = YEARWEEK(CURDATE(), 1)`);
-    result.totalGananciasMes = await getGananciasPorRango(`YEAR(fecha) = YEAR(CURDATE()) AND MONTH(fecha) = MONTH(CURDATE())`);
-    result.totalGananciasAnio = await getGananciasPorRango(`YEAR(fecha) = YEAR(CURDATE())`);
+    result.totalGananciasSemana = await getGananciasPorRango(
+      `YEARWEEK(fecha, 1) = YEARWEEK(CURDATE(), 1)`
+    );
+    result.totalGananciasMes = await getGananciasPorRango(
+      `YEAR(fecha) = YEAR(CURDATE()) AND MONTH(fecha) = MONTH(CURDATE())`
+    );
+    result.totalGananciasAnio = await getGananciasPorRango(
+      `YEAR(fecha) = YEAR(CURDATE())`
+    );
 
     res.json(result);
   } catch (error) {
-    console.error('Error en getResumenMetadata:', error.message);
-    res.status(500).json({ error: 'Error al obtener resumen de metadata' });
+    console.error("Error en getResumenMetadata:", error.message);
+    res.status(500).json({ error: "Error al obtener resumen de metadata" });
   }
 };
-
 
 exports.getResumenPorCaja = async (req, res) => {
   try {
@@ -172,52 +191,55 @@ exports.getResumenPorCaja = async (req, res) => {
           c.ubicacion,
           c.estado AS estado_caja,
           c.descripcion,
-    
+
           ac.estado AS estado_apertura,
-    
+
           ua.id       AS apertura_usuario_id,
           ua.username AS apertura_usuario_nombre,
           ua.email    AS apertura_usuario_email,
-    
+
           ac.fecha_apertura AS apertura_fecha,
           ac.hora_apertura  AS apertura_hora,
           ac.monto_inicial  AS monto_inicial,
-    
+
           ac.fecha_cierre    AS cierre_fecha,
           ac.hora_cierre     AS cierre_hora,
-    
+
           COALESCE(SUM(CASE 
             WHEN m.id_servicio <> 999 AND m.medio_pago = 'EFECTIVO' 
-                 AND m.fecha = COALESCE(?, m.fecha)
+                AND m.fecha = COALESCE(?, m.fecha)
             THEN m.monto END), 0) AS efectivo,
-    
+
           COALESCE(SUM(CASE 
             WHEN m.id_servicio <> 999 AND m.medio_pago = 'TARJETA' 
-                 AND m.fecha = COALESCE(?, m.fecha)
+                AND m.fecha = COALESCE(?, m.fecha)
             THEN m.monto END), 0) AS tarjeta,
-    
+
           COALESCE(SUM(CASE 
             WHEN m.id_servicio <> 999 
-                 AND m.fecha = COALESCE(?, m.fecha)
+                AND m.fecha = COALESCE(?, m.fecha)
             THEN m.monto END), 0) AS total,
-    
+
           COALESCE(SUM(CASE 
             WHEN m.id_servicio = 999 
-                 AND m.fecha = COALESCE(?, m.fecha)
+                AND m.fecha = COALESCE(?, m.fecha)
             THEN m.monto END), 0) AS retiros,
-    
+
           COALESCE(SUM(CASE 
             WHEN m.id_servicio <> 999 
-                 AND m.fecha = COALESCE(?, m.fecha)
+                AND m.fecha = COALESCE(?, m.fecha)
             THEN 1 END), 0) AS transacciones,
-    
+
           MIN(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.hora  END) AS primera_transaccion,
           MAX(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.hora  END) AS ultima_transaccion,
           MIN(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.fecha END) AS fecha_primera_transaccion,
           MAX(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.fecha END) AS fecha_ultima_transaccion
-    
+
         FROM cajas c
-    
+
+        -- Excluir cajas inactivas
+        WHERE c.estado <> 'inactiva'
+
         LEFT JOIN (
           SELECT *
           FROM (
@@ -228,7 +250,7 @@ exports.getResumenPorCaja = async (req, res) => {
                 ORDER BY
                   (ac.estado = 'abierta') DESC,
                   (ac.fecha_apertura = COALESCE(?, CURDATE())
-                   OR ac.fecha_cierre  = COALESCE(?, CURDATE())) DESC,
+                  OR ac.fecha_cierre  = COALESCE(?, CURDATE())) DESC,
                   ac.id DESC
               ) AS rn
             FROM aperturas_cierres ac
@@ -236,19 +258,19 @@ exports.getResumenPorCaja = async (req, res) => {
           WHERE z.rn = 1
         ) ac
           ON ac.numero_caja = c.numero_caja
-    
+
         LEFT JOIN users ua
           ON ua.id = ac.id_usuario_apertura
-    
+
         LEFT JOIN movimientos m
           ON m.id_aperturas_cierres = ac.id
-    
+
         GROUP BY
           c.id, c.numero_caja, c.nombre, c.ubicacion, c.estado, c.descripcion,
           ac.id, ac.estado, ac.fecha_apertura, ac.hora_apertura, ac.monto_inicial,
           ac.fecha_cierre, ac.hora_cierre,
           ua.id, ua.username, ua.email
-    
+
         ORDER BY c.numero_caja ASC
       `,
       [
@@ -263,10 +285,9 @@ exports.getResumenPorCaja = async (req, res) => {
         fechaFiltro, // fecha_ultima_transaccion
 
         fechaFiltro, // ac.fecha_apertura = COALESCE(?, CURDATE())
-        fechaFiltro  // ac.fecha_cierre   = COALESCE(?, CURDATE())
+        fechaFiltro, // ac.fecha_cierre   = COALESCE(?, CURDATE())
       ]
     );
-
 
     // 2) Totales del DÍA (todos los movimientos de la fecha, sin importar sesión)
     const [totDiaRows] = await db.query(
@@ -284,9 +305,15 @@ exports.getResumenPorCaja = async (req, res) => {
         `,
       [fechaFiltro]
     );
-    const totalesDia = totDiaRows?.[0] || { efectivo: 0, tarjeta: 0, total: 0, retiros: 0, transacciones: 0 };
+    const totalesDia = totDiaRows?.[0] || {
+      efectivo: 0,
+      tarjeta: 0,
+      total: 0,
+      retiros: 0,
+      transacciones: 0,
+    };
 
-    const cajas = rows.map(r => ({
+    const cajas = rows.map((r) => ({
       id: r.id,
       numero_caja: r.numero_caja,
       nombre: r.nombre,
@@ -297,24 +324,25 @@ exports.getResumenPorCaja = async (req, res) => {
 
       apertura: r.estado_apertura
         ? {
-          usuario: r.apertura_usuario_id
-            ? {
-              id: r.apertura_usuario_id,
-              nombre: r.apertura_usuario_nombre,
-              email: r.apertura_usuario_email,
-            }
-            : null,
-          fecha: r.apertura_fecha,
-          hora: r.apertura_hora,
-        }
+            usuario: r.apertura_usuario_id
+              ? {
+                  id: r.apertura_usuario_id,
+                  nombre: r.apertura_usuario_nombre,
+                  email: r.apertura_usuario_email,
+                }
+              : null,
+            fecha: r.apertura_fecha,
+            hora: r.apertura_hora,
+          }
         : null,
 
-      cierre: r.estado_apertura === 'cerrada'
-        ? {
-          fecha: r.cierre_fecha || null,
-          hora: r.cierre_hora || null,
-        }
-        : null,
+      cierre:
+        r.estado_apertura === "cerrada"
+          ? {
+              fecha: r.cierre_fecha || null,
+              hora: r.cierre_hora || null,
+            }
+          : null,
 
       monto_inicial: r.monto_inicial ?? 0,
       efectivo: r.efectivo,
@@ -331,14 +359,11 @@ exports.getResumenPorCaja = async (req, res) => {
 
     res.json({
       fecha: fecha || null,
-      cajas,           // métricas por sesión (positivos) + retiros por sesión
-      totales: totalesDia // totales del día (positivos) + retiros del día
+      cajas, // métricas por sesión (positivos) + retiros por sesión
+      totales: totalesDia, // totales del día (positivos) + retiros del día
     });
   } catch (error) {
-    console.error('Error en getResumenPorCaja:', error.message);
-    res.status(500).json({ error: 'Error al obtener resumen por caja' });
+    console.error("Error en getResumenPorCaja:", error.message);
+    res.status(500).json({ error: "Error al obtener resumen por caja" });
   }
 };
-
-
-
