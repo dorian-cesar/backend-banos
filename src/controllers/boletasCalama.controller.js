@@ -741,9 +741,16 @@ exports.emitirBoleta = async (req, res) => {
   }
 };
 
-// ----- Endpoint: emitir un lote de boletas (todas con folios reales válidos) -----
+// ----- Endpoint: emitir un lote de boletas (solo un folio real por lote) -----
 exports.emitirLoteBoletas = async (req, res) => {
   let { nombre, precio, cantidad, monto_total } = req.body;
+
+  nombre = nombre
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ñ/g, "n")
+    .replace(/Ñ/g, "N")
+    .toLowerCase();
 
   precio = Number(precio);
   cantidad = Number(cantidad);
@@ -762,31 +769,25 @@ exports.emitirLoteBoletas = async (req, res) => {
   }
 
   try {
-    // --- Variable para enviar folio al front ---
-    let folioParaRespuesta;
-
-    // --- Obtener todos los CAF disponibles y sus rangos ---
     const archivosCAF = fs
       .readdirSync(CAF_DIRECTORY)
       .filter((f) => f.endsWith(".xml"));
 
-    // --- Manejo de casos sin CAF o folios insuficientes (lote ficticio completo) ---
+    const fechaChile = obtenerFechaHoraChile();
+
+    // Si NO hay CAFs → folio ficticio
     if (!archivosCAF.length) {
-      console.warn(
-        "No hay CAF disponibles, generando lote completamente ficticio..."
-      );
+      const folioLote = await generarFolioFicticioUnico(db);
 
-      // Primer folio ficticio para la respuesta
-      folioParaRespuesta = await generarFolioFicticioUnico(db);
-
-      // Insertar primer folio
+      // Como no hay CAF, generamos y guardamos boleta ficticia de inmediato
       await db.query(
-        `INSERT INTO boletas_calama (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
+        `INSERT INTO boletas_calama 
+          (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
         [
-          folioParaRespuesta,
-          nombre,
-          precio,
+          folioLote,
+          `${nombre} (LOTE)`,
+          monto_total,
           fechaChile,
           "FICTICIA",
           null,
@@ -796,36 +797,14 @@ exports.emitirLoteBoletas = async (req, res) => {
         ]
       );
 
-      // Insertar restantes boletas ficticias
-      for (let i = 1; i < cantidad; i++) {
-        const folioFicticio = await generarFolioFicticioUnico(db);
-        await db.query(
-          `INSERT INTO boletas_calama (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
-          [
-            folioFicticio,
-            nombre,
-            precio,
-            fechaChile,
-            "FICTICIA",
-            null,
-            null,
-            monto_total,
-            cantidad,
-          ]
-        );
-      }
-
       return res.status(201).json({
-        message:
-          "No hay CAF disponibles. Se generó un lote de boletas ficticias.",
-        cantidad,
+        message: "No hay CAF disponibles. Se generó lote ficticio.",
+        folio: folioLote,
         ficticia: true,
-        folio: folioParaRespuesta,
       });
     }
 
-    // --- Preparar CAFs disponibles ---
+    // Hay CAF disponible → buscamos rango correcto
     const cafs = archivosCAF
       .map((archivo) => {
         const ruta = path.join(CAF_DIRECTORY, archivo);
@@ -835,403 +814,182 @@ exports.emitirLoteBoletas = async (req, res) => {
         );
         if (!rngMatch) return null;
         return {
-          archivo,
           ruta,
-          desde: parseInt(rngMatch[1].trim(), 10),
-          hasta: parseInt(rngMatch[2].trim(), 10),
+          desde: parseInt(rngMatch[1], 10),
+          hasta: parseInt(rngMatch[2], 10),
         };
       })
       .filter(Boolean)
       .sort((a, b) => a.desde - b.desde);
 
-    // --- Obtener último folio usado ---
     const [rows] = await db.query(
       "SELECT MAX(CAST(SUBSTRING_INDEX(folio, '-', 1) AS UNSIGNED)) AS ultimo FROM boletas_calama WHERE (ficticia IS NULL OR ficticia = 0)"
     );
-    let siguienteFolio = Number(rows[0]?.ultimo) + 1 || 1;
 
-    // --- Encontrar el CAF inicial que cubra el primer folio ---
-    let cafActualIndex = cafs.findIndex(
+    let siguienteFolio = Number(rows[0]?.ultimo) + 1 || 1;
+    let cafActual = cafs.find(
       (c) => siguienteFolio >= c.desde && siguienteFolio <= c.hasta
     );
-    if (cafActualIndex === -1) {
-      return res
-        .status(400)
-        .json({ error: "No hay CAF que cubra el siguiente folio disponible" });
+
+    // Si no hay CAF que cubra el folio → folio ficticio
+    let folioLote, ficticia;
+    if (!cafActual) {
+      folioLote = await generarFolioFicticioUnico(db);
+      ficticia = true;
+    } else {
+      folioLote = siguienteFolio;
+      ficticia = false;
     }
-    let cafActual = cafs[cafActualIndex];
-    CAF_PATH = cafActual.ruta;
 
-    // --- Primer folio real para respuesta ---
-    folioParaRespuesta = siguienteFolio;
-
-    // --- RESPUESTA RÁPIDA AL FRONT ---
-    res.status(201).json({
-      message: "Proceso de lote iniciado",
-      cantidad,
-      monto_total,
-      ficticia: false,
-      folio: folioParaRespuesta,
-    });
-
-    // --- Flujo asíncrono del lote ---
+    // Flujo asíncrono principal
     (async () => {
       try {
-        const dteXmls = [];
-        for (let i = 0; i < cantidad; i++) {
-          // Cambiar CAF si folio supera el rango
-          if (siguienteFolio > cafActual.hasta) {
-            cafActualIndex++;
-            if (cafActualIndex >= cafs.length) {
-              console.log(
-                `Se acabaron los folios reales. Boletas restantes serán ficticias.`
-              );
-              const faltantes = cantidad - i;
-              for (let j = 0; j < faltantes; j++) {
-                const folioFicticio = await generarFolioFicticioUnico(db);
-                await db.query(
-                  `INSERT INTO boletas_calama (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
-                  [
-                    folioFicticio,
-                    nombre,
-                    precio,
-                    fechaChile,
-                    "FICTICIA",
-                    null,
-                    null,
-                    monto_total,
-                    cantidad,
-                  ]
-                );
-              }
-              break;
+        let xmlBase64 = null;
+        let trackId = null;
+        let estado = ficticia ? "FICTICIA" : "PEND";
+
+        if (!ficticia) {
+          CAF_PATH = cafActual.ruta;
+          const payload = crearPayload(
+            { nombre, precio: monto_total },
+            folioLote
+          );
+
+          // Generar DTE XML
+          const formGen = new FormData();
+          formGen.append("files", fs.createReadStream(CERT_PATH));
+          formGen.append("files2", fs.createReadStream(CAF_PATH));
+          formGen.append("input", JSON.stringify(payload));
+
+          const responseGen = await axios.post(
+            `${API_URL}/dte/generar`,
+            formGen,
+            {
+              headers: { Authorization: API_KEY, ...formGen.getHeaders() },
             }
-            cafActual = cafs[cafActualIndex];
-            CAF_PATH = cafActual.ruta;
-          }
+          );
 
-          try {
-            // --- Crear DTE individual ---
-            const payload = crearPayload({ nombre, precio }, siguienteFolio);
-            const formGen = new FormData();
-            formGen.append("files", fs.createReadStream(CERT_PATH));
-            formGen.append("files2", fs.createReadStream(CAF_PATH));
-            formGen.append("input", JSON.stringify(payload));
+          const dteXml = responseGen.data;
+          const { FechaResolucion, NumeroResolucion } =
+            obtenerDatosResolucion(CAF_PATH);
 
-            const responseGen = await axios.post(
-              `${API_URL}/dte/generar`,
-              formGen,
-              {
-                headers: { Authorization: API_KEY, ...formGen.getHeaders() },
-              }
-            );
-
-            const dteXml = responseGen.data;
-
-            // --- Generar sobre individual ---
-            const { FechaResolucion, NumeroResolucion } =
-              obtenerDatosResolucion(CAF_PATH);
-            const formSobre = new FormData();
-            formSobre.append(
-              "input",
-              JSON.stringify({
-                Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-                Caratula: {
-                  RutEmisor: `${EMISOR_RUT}-${EMISOR_DV}`,
-                  RutReceptor: "60803000-K",
-                  FechaResolucion,
-                  NumeroResolucion,
-                },
-              })
-            );
-            formSobre.append("files", fs.createReadStream(CERT_PATH));
-            formSobre.append("files", Buffer.from(dteXml, "utf-8"), {
-              filename: `dte_${siguienteFolio}.xml`,
-            });
-
-            const responseSobre = await axios.post(
-              `${API_URL}/envio/generar`,
-              formSobre,
-              {
-                headers: { Authorization: API_KEY, ...formSobre.getHeaders() },
-                maxBodyLength: Infinity,
-              }
-            );
-            const sobreXml = responseSobre.data;
-
-            // --- Enviar al SII ---
-            const formEnvio = new FormData();
-            formEnvio.append("files", fs.createReadStream(CERT_PATH));
-            formEnvio.append("files2", Buffer.from(sobreXml, "utf-8"), {
-              filename: `sobre_${siguienteFolio}.xml`,
-            });
-            formEnvio.append(
-              "input",
-              JSON.stringify({
-                Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-                Ambiente: 0,
-                Tipo: 2,
-              })
-            );
-
-            const responseEnvio = await axios.post(
-              `${API_URL}/envio/enviar`,
-              formEnvio,
-              {
-                headers: { Authorization: API_KEY, ...formEnvio.getHeaders() },
-              }
-            );
-            const trackId = responseEnvio.data?.trackId;
-
-            // --- Consultar estado ---
-            const formConsulta = new FormData();
-            formConsulta.append("files", fs.createReadStream(CERT_PATH));
-            formConsulta.append(
-              "input",
-              JSON.stringify({
-                Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-                RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
-                TrackId: trackId,
-                Ambiente: 0,
-                ServidorBoletaREST: 1,
-              })
-            );
-
-            const responseConsulta = await axios.post(
-              `${API_URL}/consulta/envio`,
-              formConsulta,
-              {
-                headers: {
-                  Authorization: API_KEY,
-                  ...formConsulta.getHeaders(),
-                },
-              }
-            );
-            const estado = responseConsulta.data?.estado || "PEND";
-            const xmlBase64 = Buffer.from(dteXml, "utf-8").toString("base64");
-
-            // --- Lógica de alertas de folios bajos ---
-            const [ultimaBoleta] = await db.query(
-              "SELECT alerta FROM boletas_calama ORDER BY id DESC LIMIT 1"
-            );
-            const alertaAnterior = ultimaBoleta[0]?.alerta;
-            let alertaActual = false;
-            const totalFoliosRestantes = cafs
-              .slice(cafActualIndex)
-              .reduce(
-                (acc, c) =>
-                  acc + (c.hasta - Math.max(c.desde, siguienteFolio) + 1),
-                0
-              );
-
-            if (totalFoliosRestantes < ALERTA_MIN_FOLIOS) {
-              if (!alertaAnterior) {
-                console.log("Enviando alerta de folios bajos...");
-                await enviarAlertaCorreo(totalFoliosRestantes);
-                alertaActual = true;
-              } else {
-                alertaActual = true;
-                console.log("Alerta ya enviada anteriormente.");
-              }
-            }
-
-            // --- Guardar boleta en BD ---
-            await db.query(
-              "INSERT INTO boletas_calama (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
-              [
-                siguienteFolio,
-                nombre,
-                precio,
-                fechaChile,
-                estado,
-                xmlBase64,
-                trackId,
-                alertaActual,
-                monto_total,
-                cantidad,
-              ]
-            );
-
-            console.log(
-              `Boleta ${siguienteFolio} guardada correctamente. Estado: ${estado}`
-            );
-          } catch (error) {
-            console.warn(
-              `Error SimpleAPI folio ${siguienteFolio}: ${error.message}`
-            );
-            // --- Boleta ficticia si falla SimpleAPI ---
-            const folioFicticio = await generarFolioFicticioUnico(db);
-            await db.query(
-              `INSERT INTO boletas_calama (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
-              [
-                folioFicticio,
-                nombre,
-                precio,
-                fechaChile,
-                "FICTICIA",
-                null,
-                null,
-                monto_total,
-                cantidad,
-              ]
-            );
-
-            // --- Enviar alerta SimpleAPI si no se ha enviado ---
-            const ahora = Date.now();
-            if (ahora - ultimaAlertaSimpleAPI > COOLDOWN_ALERTA_SIMPLE_API) {
-              console.log(
-                "Enviando alerta: SimpleAPI no responde o límite alcanzado..."
-              );
-              await enviarAlertaCorreoSimpleAPI(0);
-              ultimaAlertaSimpleAPI = ahora;
-            } else {
-              console.log(
-                "Alerta SimpleAPI ya enviada recientemente. No se reenvía."
-              );
-            }
-          }
-
-          siguienteFolio++;
-        }
-
-        if (!dteXmls.length) return;
-
-        // --- Generar un solo sobre con todos los DTE ---
-        const formSobre = new FormData();
-        formSobre.append(
-          "input",
-          JSON.stringify({
-            Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-            Caratula: {
-              RutEmisor: `${EMISOR_RUT}-${EMISOR_DV}`,
-              RutReceptor: "60803000-K",
-              FechaResolucion: dteXmls[0].FechaResolucion,
-              NumeroResolucion: dteXmls[0].NumeroResolucion,
-            },
-          })
-        );
-        formSobre.append("files", fs.createReadStream(CERT_PATH));
-        for (const { folio, xml } of dteXmls) {
-          formSobre.append("files", Buffer.from(xml, "utf-8"), {
-            filename: `dte_${folio}.xml`,
+          // Generar sobre
+          const formSobre = new FormData();
+          formSobre.append(
+            "input",
+            JSON.stringify({
+              Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
+              Caratula: {
+                RutEmisor: `${EMISOR_RUT}-${EMISOR_DV}`,
+                RutReceptor: "60803000-K",
+                FechaResolucion,
+                NumeroResolucion,
+              },
+            })
+          );
+          formSobre.append("files", fs.createReadStream(CERT_PATH));
+          formSobre.append("files", Buffer.from(dteXml, "utf-8"), {
+            filename: `dte_${folioLote}.xml`,
           });
-        }
 
-        const responseSobre = await axios.post(
-          `${API_URL}/envio/generar`,
-          formSobre,
-          {
-            headers: { Authorization: API_KEY, ...formSobre.getHeaders() },
-            maxBodyLength: Infinity,
-          }
-        );
-
-        const sobreXml = responseSobre.data;
-
-        // --- Enviar sobre al SII ---
-        const formEnvio = new FormData();
-        formEnvio.append("files", fs.createReadStream(CERT_PATH));
-        formEnvio.append("files2", Buffer.from(sobreXml, "utf-8"), {
-          filename: "sobre_lote.xml",
-        });
-        formEnvio.append(
-          "input",
-          JSON.stringify({
-            Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-            Ambiente: 0,
-            Tipo: 2,
-          })
-        );
-
-        const responseEnvio = await axios.post(
-          `${API_URL}/envio/enviar`,
-          formEnvio,
-          {
-            headers: { Authorization: API_KEY, ...formEnvio.getHeaders() },
-          }
-        );
-
-        const trackId = responseEnvio.data?.trackId;
-        console.log("trackId:", trackId);
-
-        // --- Consultar estado ---
-        const formConsulta = new FormData();
-        formConsulta.append("files", fs.createReadStream(CERT_PATH));
-        formConsulta.append(
-          "input",
-          JSON.stringify({
-            Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
-            RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
-            TrackId: trackId,
-            Ambiente: 0,
-            ServidorBoletaREST: 1,
-          })
-        );
-
-        const responseConsulta = await axios.post(
-          `${API_URL}/consulta/envio`,
-          formConsulta,
-          {
-            headers: { Authorization: API_KEY, ...formConsulta.getHeaders() },
-          }
-        );
-
-        const estado = responseConsulta.data?.estado || "PEND";
-        const xmlBase64 = Buffer.from(sobreXml, "utf-8").toString("base64");
-
-        // --- Alerta folios bajos ---
-        const [ultimaBoleta] = await db.query(
-          "SELECT alerta FROM boletas_calama ORDER BY id DESC LIMIT 1"
-        );
-        const alertaAnterior = ultimaBoleta[0]?.alerta;
-        let alertaActual = false;
-
-        const totalFoliosRestantes = cafs
-          .slice(cafActualIndex)
-          .reduce(
-            (acc, c) => acc + (c.hasta - Math.max(c.desde, siguienteFolio) + 1),
-            0
+          const responseSobre = await axios.post(
+            `${API_URL}/envio/generar`,
+            formSobre,
+            {
+              headers: { Authorization: API_KEY, ...formSobre.getHeaders() },
+              maxBodyLength: Infinity,
+            }
           );
 
-        if (totalFoliosRestantes < ALERTA_MIN_FOLIOS) {
-          if (!alertaAnterior) await enviarAlertaCorreo(totalFoliosRestantes);
-          alertaActual = true;
+          const sobreXml = responseSobre.data;
+
+          // Enviar al SII
+          const formEnvio = new FormData();
+          formEnvio.append("files", fs.createReadStream(CERT_PATH));
+          formEnvio.append("files2", Buffer.from(sobreXml, "utf-8"), {
+            filename: `sobre_${folioLote}.xml`,
+          });
+          formEnvio.append(
+            "input",
+            JSON.stringify({
+              Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
+              Ambiente: 1,
+              Tipo: 2,
+            })
+          );
+
+          const responseEnvio = await axios.post(
+            `${API_URL}/envio/enviar`,
+            formEnvio,
+            {
+              headers: { Authorization: API_KEY, ...formEnvio.getHeaders() },
+            }
+          );
+
+          trackId = responseEnvio.data?.trackId;
+
+          // Consultar estado en SII
+          // const formConsulta = new FormData();
+          // formConsulta.append("files", fs.createReadStream(CERT_PATH));
+          // formConsulta.append(
+          //   "input",
+          //   JSON.stringify({
+          //     Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
+          //     RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
+          //     TrackId: trackId,
+          //     Ambiente: 1,
+          //     ServidorBoletaREST: 1,
+          //   })
+          // );
+
+          // const responseConsulta = await axios.post(
+          //   `${API_URL}/consulta/envio`,
+          //   formConsulta,
+          //   {
+          //     headers: { Authorization: API_KEY, ...formConsulta.getHeaders() },
+          //   }
+          // );
+
+          // estado = responseConsulta.data?.estado || "PEND";
+          xmlBase64 = Buffer.from(sobreXml, "utf-8").toString("base64");
         }
 
-        // --- Guardar todas las boletas con folios únicos ---
-        for (const { folio } of dteXmls) {
-          await db.query(
-            "INSERT INTO boletas_calama (folio, folio_padre, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
-            [
-              folio,
-              null,
-              nombre,
-              precio,
-              fechaChile,
-              estado,
-              xmlBase64,
-              trackId,
-              alertaActual,
-              monto_total,
-              cantidad,
-            ]
-          );
-        }
+        await db.query(
+          `INSERT INTO boletas_calama 
+            (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, FALSE, ?, ?)`,
+          [
+            folioLote,
+            `${nombre} (LOTE)`,
+            monto_total,
+            fechaChile,
+            estado,
+            xmlBase64,
+            trackId,
+            ficticia ? 1 : 0,
+            monto_total,
+            cantidad,
+          ]
+        );
 
         console.log(
-          `Lote de ${dteXmls.length} boletas generado correctamente y guardado en BD`
+          `Lote ${folioLote} insertado correctamente (estado: ${estado}, ficticia: ${ficticia})`
         );
       } catch (err) {
-        console.error(
-          "Error en flujo del lote:",
-          err.response?.data || err.message
-        );
+        console.error("Error en envío del lote:", err.message);
       }
     })();
+
+    // Responder rápido al cliente
+    res.status(201).json({
+      message: ficticia
+        ? "Lote ficticio iniciado (sin CAF disponible)"
+        : "Lote real iniciado",
+      folio: folioLote,
+      ficticia,
+    });
   } catch (err) {
-    console.error("Error al procesar lote:", err.response?.data || err.message);
+    console.error("Error al procesar lote:", err.message);
     if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 };

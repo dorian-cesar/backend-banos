@@ -7,6 +7,7 @@ consulta-dte.js
 certificado/certificado.pem
 certificado/clave.pem
 boletas.controller backup.js
+boletasCalama.controller backup.js
 test.js
 certificadoalejandro.pfx
 certificadoluis.pfx
