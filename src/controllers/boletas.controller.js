@@ -1093,8 +1093,7 @@ exports.obtenerStatusSuscripcion = async (req, res) => {
         )}%`
       );
 
-      // if (porcentajeRestante <= 15) {
-      if (porcentajeRestante <= 95) {
+      if (porcentajeRestante <= 15) {
         console.log("Alerta: Quedan menos del 15% de peticiones en SimpleAPI");
         await enviarAlertaCorreoSimpleAPI(restante);
         emailEnviado = true;
