@@ -512,7 +512,14 @@ function obtenerFechaHoraChile() {
 
 // --- Endpoint emitirBoleta con flujo principal ---
 exports.emitirBoleta = async (req, res) => {
-  const { nombre, precio } = req.body;
+  let { nombre, precio } = req.body;
+
+  nombre = nombre
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ñ/g, "n")
+    .replace(/Ñ/g, "N")
+    .toLowerCase();
 
   if (!nombre || !precio)
     return res.status(400).json({ error: "Faltan datos del producto" });
