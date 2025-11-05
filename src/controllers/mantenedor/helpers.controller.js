@@ -181,47 +181,75 @@ exports.getResumenPorCaja = async (req, res) => {
     const { fecha } = req.query; // "YYYY-MM-DD" opcional
     const fechaFiltro = fecha || null;
 
-    // 1) Por-sesión (igual que antes, pero separando retiros)
     const [rows] = await db.query(
       `
-        SELECT
-          c.id,
-          c.numero_caja,
-          c.nombre,
-          c.ubicacion,
-          c.estado AS estado_caja,
-          c.descripcion,
-          ...
-        FROM cajas c
-        LEFT JOIN (
-          SELECT *
-          FROM (
-            SELECT
-              ac.*,
-              ROW_NUMBER() OVER (
-                PARTITION BY ac.numero_caja
-                ORDER BY
-                  (ac.estado = 'abierta') DESC,
-                  (ac.fecha_apertura = COALESCE(?, CURDATE())
-                  OR ac.fecha_cierre  = COALESCE(?, CURDATE())) DESC,
-                  ac.id DESC
-              ) AS rn
-            FROM aperturas_cierres ac
-          ) z
-          WHERE z.rn = 1
-        ) ac ON ac.numero_caja = c.numero_caja
-        LEFT JOIN users ua ON ua.id = ac.id_usuario_apertura
-        LEFT JOIN movimientos m ON m.id_aperturas_cierres = ac.id
+      SELECT
+        c.id,
+        c.numero_caja,
+        c.nombre,
+        c.ubicacion,
+        c.estado AS estado_caja,
+        c.descripcion,
 
-        WHERE c.estado <> 'inactiva'
+        ac.estado AS estado_apertura,
 
-        GROUP BY
-          c.id, c.numero_caja, c.nombre, c.ubicacion, c.estado, c.descripcion,
-          ac.id, ac.estado, ac.fecha_apertura, ac.hora_apertura, ac.monto_inicial,
-          ac.fecha_cierre, ac.hora_cierre,
-          ua.id, ua.username, ua.email
+        ua.id       AS apertura_usuario_id,
+        ua.username AS apertura_usuario_nombre,
+        ua.email    AS apertura_usuario_email,
 
-        ORDER BY c.numero_caja ASC
+        ac.fecha_apertura AS apertura_fecha,
+        ac.hora_apertura  AS apertura_hora,
+        ac.monto_inicial  AS monto_inicial,
+
+        ac.fecha_cierre    AS cierre_fecha,
+        ac.hora_cierre     AS cierre_hora,
+
+        COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.medio_pago = 'EFECTIVO' AND m.fecha = COALESCE(?, m.fecha) THEN m.monto END), 0) AS efectivo,
+        COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.medio_pago = 'TARJETA' AND m.fecha = COALESCE(?, m.fecha) THEN m.monto END), 0) AS tarjeta,
+        COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.fecha = COALESCE(?, m.fecha) THEN m.monto END), 0) AS total,
+        COALESCE(SUM(CASE WHEN m.id_servicio = 999 AND m.fecha = COALESCE(?, m.fecha) THEN m.monto END), 0) AS retiros,
+        COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.fecha = COALESCE(?, m.fecha) THEN 1 END), 0) AS transacciones,
+        MIN(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.hora END) AS primera_transaccion,
+        MAX(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.hora END) AS ultima_transaccion,
+        MIN(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.fecha END) AS fecha_primera_transaccion,
+        MAX(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.fecha END) AS fecha_ultima_transaccion
+
+      FROM cajas c
+
+      LEFT JOIN (
+        SELECT *
+        FROM (
+          SELECT
+            ac.*,
+            ROW_NUMBER() OVER (
+              PARTITION BY ac.numero_caja
+              ORDER BY
+                (ac.estado = 'abierta') DESC,
+                (ac.fecha_apertura = COALESCE(?, CURDATE()) OR ac.fecha_cierre = COALESCE(?, CURDATE())) DESC,
+                ac.id DESC
+            ) AS rn
+          FROM aperturas_cierres ac
+        ) z
+        WHERE z.rn = 1
+      ) ac
+        ON ac.numero_caja = c.numero_caja
+
+      LEFT JOIN users ua
+        ON ua.id = ac.id_usuario_apertura
+
+      LEFT JOIN movimientos m
+        ON m.id_aperturas_cierres = ac.id
+
+      -- Excluir cajas inactivas
+      WHERE c.estado <> 'inactiva'
+
+      GROUP BY
+        c.id, c.numero_caja, c.nombre, c.ubicacion, c.estado, c.descripcion,
+        ac.id, ac.estado, ac.fecha_apertura, ac.hora_apertura, ac.monto_inicial,
+        ac.fecha_cierre, ac.hora_cierre,
+        ua.id, ua.username, ua.email
+
+      ORDER BY c.numero_caja ASC
       `,
       [
         fechaFiltro, // efectivo
@@ -229,91 +257,18 @@ exports.getResumenPorCaja = async (req, res) => {
         fechaFiltro, // total
         fechaFiltro, // retiros
         fechaFiltro, // transacciones
-        fechaFiltro, // primera_transaccion (hora)
-        fechaFiltro, // ultima_transaccion (hora)
+        fechaFiltro, // primera_transaccion
+        fechaFiltro, // ultima_transaccion
         fechaFiltro, // fecha_primera_transaccion
         fechaFiltro, // fecha_ultima_transaccion
-
-        fechaFiltro, // ac.fecha_apertura = COALESCE(?, CURDATE())
-        fechaFiltro, // ac.fecha_cierre   = COALESCE(?, CURDATE())
+        fechaFiltro, // ac.fecha_apertura
+        fechaFiltro, // ac.fecha_cierre
       ]
     );
 
-    // 2) Totales del DÍA (todos los movimientos de la fecha, sin importar sesión)
-    const [totDiaRows] = await db.query(
-      `
-        SELECT
-          COALESCE(SUM(CASE WHEN id_servicio <> 999 AND medio_pago = 'EFECTIVO' THEN monto END), 0) AS efectivo,
-          COALESCE(SUM(CASE WHEN id_servicio <> 999 AND medio_pago = 'TARJETA'  THEN monto END), 0) AS tarjeta,
-          COALESCE(SUM(CASE WHEN id_servicio <> 999 THEN monto END), 0) AS total,
-  
-          COALESCE(SUM(CASE WHEN id_servicio = 999 THEN monto END), 0) AS retiros,
-  
-          COUNT(*) AS transacciones
-        FROM movimientos
-        WHERE fecha = COALESCE(?, CURDATE())
-        `,
-      [fechaFiltro]
-    );
-    const totalesDia = totDiaRows?.[0] || {
-      efectivo: 0,
-      tarjeta: 0,
-      total: 0,
-      retiros: 0,
-      transacciones: 0,
-    };
-
-    const cajas = rows.map((r) => ({
-      id: r.id,
-      numero_caja: r.numero_caja,
-      nombre: r.nombre,
-      ubicacion: r.ubicacion,
-      estado_caja: r.estado_caja,
-      descripcion: r.descripcion,
-      estado_apertura: r.estado_apertura,
-
-      apertura: r.estado_apertura
-        ? {
-            usuario: r.apertura_usuario_id
-              ? {
-                  id: r.apertura_usuario_id,
-                  nombre: r.apertura_usuario_nombre,
-                  email: r.apertura_usuario_email,
-                }
-              : null,
-            fecha: r.apertura_fecha,
-            hora: r.apertura_hora,
-          }
-        : null,
-
-      cierre:
-        r.estado_apertura === "cerrada"
-          ? {
-              fecha: r.cierre_fecha || null,
-              hora: r.cierre_hora || null,
-            }
-          : null,
-
-      monto_inicial: r.monto_inicial ?? 0,
-      efectivo: r.efectivo,
-      tarjeta: r.tarjeta,
-      total: r.total,
-      retiros: r.retiros,
-
-      transacciones: r.transacciones,
-      primera_transaccion: r.primera_transaccion,
-      ultima_transaccion: r.ultima_transaccion,
-      fecha_primera_transaccion: r.fecha_primera_transaccion,
-      fecha_ultima_transaccion: r.fecha_ultima_transaccion,
-    }));
-
-    res.json({
-      fecha: fecha || null,
-      cajas, // métricas por sesión (positivos) + retiros por sesión
-      totales: totalesDia, // totales del día (positivos) + retiros del día
-    });
+    res.json(rows);
   } catch (error) {
-    console.error("Error en getResumenPorCaja:", error.message);
+    console.error("Error getResumenPorCaja:", error);
     res.status(500).json({ error: "Error al obtener resumen por caja" });
   }
 };
