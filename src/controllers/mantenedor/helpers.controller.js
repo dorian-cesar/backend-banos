@@ -193,6 +193,7 @@ exports.getResumenPorCaja = async (req, res) => {
         c.descripcion,
 
         ac.estado AS estado_apertura,
+        ac.id as id_apertura,
 
         ua.id       AS apertura_usuario_id,
         ua.username AS apertura_usuario_nombre,
@@ -312,6 +313,7 @@ exports.getResumenPorCaja = async (req, res) => {
       .map((r) => ({
         id: r.id,
         numero_caja: r.numero_caja,
+        id_apertura: r.id_apertura,
         nombre: r.nombre,
         ubicacion: r.ubicacion,
         estado_caja: r.estado_caja,
