@@ -364,13 +364,22 @@ async function obtenerSiguienteFolio() {
     // const [rows] = await db.query(
     //   `SELECT MAX(folio) as ultimo FROM boletas WHERE (ficticia IS NULL OR ficticia = 0) AND (estado_sii IS NULL OR estado_sii != 'RSC') AND folio NOT REGEXP '-[0-9]+$'`
     // );
+
+    // const [rows] = await db.query(`
+    //   SELECT MAX(CAST(SUBSTRING_INDEX(folio, '-', 1) AS UNSIGNED)) AS ultimo
+    //   FROM boletas
+    //   WHERE (ficticia IS NULL OR ficticia = 0)
+    // `);
     const [rows] = await db.query(`
-      SELECT MAX(CAST(SUBSTRING_INDEX(folio, '-', 1) AS UNSIGNED)) AS ultimo
+      SELECT folio as ultimo
       FROM boletas
-      WHERE (ficticia IS NULL OR ficticia = 0)
+      WHERE ficticia = 0
+      ORDER BY id DESC
+      LIMIT 1;
     `);
     // Conversión explícita a número
     const ultimoFolio = Number(rows[0]?.ultimo) || 0;
+    console.log("ultimo folio:", ultimoFolio);
     const siguienteFolio = ultimoFolio + 1;
 
     console.log("Debug folios:");
@@ -525,6 +534,7 @@ exports.emitirBoleta = async (req, res) => {
     return res.status(400).json({ error: "Faltan datos del producto" });
 
   try {
+    console.log("--- Iniciando flujo para emitir boleta ---");
     const { folioAsignado, CAF_PATH, totalFoliosRestantes } =
       await obtenerSiguienteFolio();
     console.log("CAF_PATH:", CAF_PATH);
@@ -634,7 +644,7 @@ exports.emitirBoleta = async (req, res) => {
           })
         );
 
-        console.log("Form envio:", formEnvio);
+        // console.log("Form envio:", formEnvio);
 
         const responseEnvio = await axios.post(
           `${API_URL}/envio/enviar`,
