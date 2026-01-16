@@ -181,7 +181,7 @@ exports.getResumenPorCaja = async (req, res) => {
     const { fecha } = req.query; // "YYYY-MM-DD" opcional
     const fechaFiltro = fecha || null;
 
-    // 1) Por-sesión (igual que antes, pero separando retiros)
+    // 1) Por-sesión (mantener igual que antes)
     const [rows] = await db.query(
       `
       SELECT
@@ -193,6 +193,7 @@ exports.getResumenPorCaja = async (req, res) => {
         c.descripcion,
 
         ac.estado AS estado_apertura,
+        ac.id as id_apertura,
 
         ua.id       AS apertura_usuario_id,
         ua.username AS apertura_usuario_nombre,
@@ -266,34 +267,53 @@ exports.getResumenPorCaja = async (req, res) => {
       ]
     );
 
-    // 2) Totales del DÍA (todos los movimientos de la fecha, sin importar sesión)
+    // 2) Totales del DÍA (todos los movimientos de la fecha, sin importar sesión) - INCLUYENDO DESGLOSE POR SERVICIO
     const [totDiaRows] = await db.query(
       `
       SELECT
+        -- Totales generales
         COALESCE(SUM(CASE WHEN id_servicio <> 999 AND medio_pago = 'EFECTIVO' THEN monto END), 0) AS efectivo,
         COALESCE(SUM(CASE WHEN id_servicio <> 999 AND medio_pago = 'TARJETA'  THEN monto END), 0) AS tarjeta,
         COALESCE(SUM(CASE WHEN id_servicio <> 999 THEN monto END), 0) AS total,
         COALESCE(SUM(CASE WHEN id_servicio = 999 THEN monto END), 0) AS retiros,
-        COUNT(*) AS transacciones
+        COUNT(*) AS transacciones,
+        
+        -- Desglose por servicio para el día (SOLO EN TOTALES)
+        COALESCE(SUM(CASE WHEN id_servicio = 1 THEN monto END), 0) AS servicio_1_monto,
+        COALESCE(SUM(CASE WHEN id_servicio = 1 THEN 1 END), 0) AS servicio_1_cantidad,
+        
+        COALESCE(SUM(CASE WHEN id_servicio = 2 THEN monto END), 0) AS servicio_2_monto,
+        COALESCE(SUM(CASE WHEN id_servicio = 2 THEN 1 END), 0) AS servicio_2_cantidad
       FROM movimientos
       WHERE fecha = COALESCE(?, CURDATE())
       `,
       [fechaFiltro]
     );
+
+    // 3) Obtener información de los servicios para el desglose
+    const [servicios] = await db.query(
+      `SELECT id, nombre, tipo, precio FROM servicios WHERE estado = 'activo' ORDER BY id`
+    );
+
     const totalesDia = totDiaRows?.[0] || {
       efectivo: 0,
       tarjeta: 0,
       total: 0,
       retiros: 0,
       transacciones: 0,
+      servicio_1_monto: 0,
+      servicio_1_cantidad: 0,
+      servicio_2_monto: 0,
+      servicio_2_cantidad: 0,
     };
 
-    // Mapear resultados (solo cajas activas, por seguridad)
+    // Mapear resultados (solo cajas activas, por seguridad) - SIN DESGLOSE POR SERVICIO EN CAJAS INDIVIDUALES
     const cajas = rows
       .filter((r) => r.estado_caja !== "inactiva")
       .map((r) => ({
         id: r.id,
         numero_caja: r.numero_caja,
+        id_apertura: r.id_apertura,
         nombre: r.nombre,
         ubicacion: r.ubicacion,
         estado_caja: r.estado_caja,
@@ -301,23 +321,23 @@ exports.getResumenPorCaja = async (req, res) => {
         estado_apertura: r.estado_apertura,
         apertura: r.estado_apertura
           ? {
-              usuario: r.apertura_usuario_id
-                ? {
-                    id: r.apertura_usuario_id,
-                    nombre: r.apertura_usuario_nombre,
-                    email: r.apertura_usuario_email,
-                  }
-                : null,
-              fecha: r.apertura_fecha,
-              hora: r.apertura_hora,
-            }
+            usuario: r.apertura_usuario_id
+              ? {
+                id: r.apertura_usuario_id,
+                nombre: r.apertura_usuario_nombre,
+                email: r.apertura_usuario_email,
+              }
+              : null,
+            fecha: r.apertura_fecha,
+            hora: r.apertura_hora,
+          }
           : null,
         cierre:
           r.estado_apertura === "cerrada"
             ? {
-                fecha: r.cierre_fecha || null,
-                hora: r.cierre_hora || null,
-              }
+              fecha: r.cierre_fecha || null,
+              hora: r.cierre_hora || null,
+            }
             : null,
         monto_inicial: r.monto_inicial ?? 0,
         efectivo: r.efectivo,
@@ -331,10 +351,27 @@ exports.getResumenPorCaja = async (req, res) => {
         fecha_ultima_transaccion: r.fecha_ultima_transaccion,
       }));
 
+    // Construir desglose por servicio SOLO PARA LOS TOTALES DEL DÍA
+    const desgloseServiciosTotales = servicios.map(servicio => ({
+      id: servicio.id,
+      nombre: servicio.nombre,
+      tipo: servicio.tipo,
+      precio: servicio.precio,
+      monto: totalesDia[`servicio_${servicio.id}_monto`] || 0,
+      cantidad: totalesDia[`servicio_${servicio.id}_cantidad`] || 0
+    }));
+
     res.json({
       fecha: fecha || null,
-      cajas,
-      totales: totalesDia,
+      cajas, // Sin desglose por servicio en cajas individuales
+      totales: {
+        efectivo: totalesDia.efectivo,
+        tarjeta: totalesDia.tarjeta,
+        total: totalesDia.total,
+        retiros: totalesDia.retiros,
+        transacciones: totalesDia.transacciones,
+        desglose_servicios: desgloseServiciosTotales // SOLO EN TOTALES
+      },
     });
   } catch (error) {
     console.error("Error en getResumenPorCaja:", error.message);
