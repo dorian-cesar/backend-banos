@@ -379,7 +379,6 @@ async function obtenerSiguienteFolio() {
     `);
     // Conversión explícita a número
     const ultimoFolio = Number(rows[0]?.ultimo) || 0;
-    console.log("ultimo folio:", ultimoFolio);
     const siguienteFolio = ultimoFolio + 1;
 
     console.log("Debug folios:");
