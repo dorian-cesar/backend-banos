@@ -11,6 +11,8 @@ dotenv.config();
 
 const app = express();
 
+const { initCrons } = require('./cron/cronJobs');
+
 const PORT = process.env.PORT || 4000;
 
 // Configuración de CORS
@@ -43,6 +45,9 @@ http.createServer(app).listen(PORT, () => {
 */
 
 //const PORT = process.env.PORT || 3000;
+
+
+initCrons();
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Servidor corriendo en puerto ${PORT}`);
 });
