@@ -130,7 +130,7 @@ exports.obtenerFoliosRestantes = async (req, res) => {
     } else {
       try {
         const [rows] = await db.query(
-          `SELECT folio FROM boletas ORDER BY id DESC LIMIT 1`
+          `SELECT folio FROM boletas ORDER BY id DESC LIMIT 1`,
         );
         if (rows.length && rows[0].folio != null) {
           ultimoFolio = Number(rows[0].folio);
@@ -201,7 +201,7 @@ exports.solicitarNuevosFolios = async (req, res) => {
         Password: CERT_PASS,
         RutEmpresa: `${EMISOR_RUT}-${EMISOR_DV}`,
         Ambiente: 1,
-      })
+      }),
     );
     data.append("files", fs.createReadStream(CERT_PATH));
 
@@ -239,7 +239,7 @@ exports.solicitarNuevosFolios = async (req, res) => {
   } catch (err) {
     console.error(
       "Error solicitando nuevos folios:",
-      err || err.response?.data || err.message
+      err || err.response?.data || err.message,
     );
     if (!res.headersSent) {
       res
@@ -386,7 +386,7 @@ async function obtenerSiguienteFolio() {
       " - Último folio en BD:",
       rows[0]?.ultimo,
       "(tipo:",
-      typeof rows[0]?.ultimo + ")"
+      typeof rows[0]?.ultimo + ")",
     );
     console.log(" - Siguiente folio:", siguienteFolio);
 
@@ -406,7 +406,7 @@ async function obtenerSiguienteFolio() {
         const ruta = path.join(CAF_DIRECTORY, archivo);
         const cafXml = fs.readFileSync(ruta, "utf-8");
         const rngMatch = cafXml.match(
-          /<RNG>\s*<D>(\d+)<\/D>\s*<H>(\d+)<\/H>\s*<\/RNG>/
+          /<RNG>\s*<D>(\d+)<\/D>\s*<H>(\d+)<\/H>\s*<\/RNG>/,
         );
         if (!rngMatch) return null;
 
@@ -448,14 +448,14 @@ async function obtenerSiguienteFolio() {
       console.log("Siguiente folio necesario:", siguienteFolio);
       console.log(
         "CAFs disponibles:",
-        cafs.map((c) => `${c.archivo}: ${c.desde}-${c.hasta}`)
+        cafs.map((c) => `${c.archivo}: ${c.desde}-${c.hasta}`),
       );
       return { folioAsignado: null, CAF_PATH: null, totalFoliosRestantes };
     }
 
     // --- Retornar resultado ---
     console.log(
-      `CAF seleccionado: ${cafSeleccionado} | Folio: ${siguienteFolio} | Folios Restantes: ${totalFoliosRestantes}`
+      `CAF seleccionado: ${cafSeleccionado} | Folio: ${siguienteFolio} | Folios Restantes: ${totalFoliosRestantes}`,
     );
     CAF_PATH = CAF_PATH_local;
 
@@ -509,7 +509,7 @@ function obtenerFechaHoraChile() {
   };
 
   const fechaChile = new Intl.DateTimeFormat("es-CL", opciones).format(
-    new Date()
+    new Date(),
   );
   const [fecha, hora] = fechaChile.split(", ");
   const [dia, mes, anio] = fecha.split("-");
@@ -548,7 +548,7 @@ exports.emitirBoleta = async (req, res) => {
       await db.query(
         `INSERT INTO boletas (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta)
            VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE)`,
-        [folioFicticio, nombre, precio, fechaChile, "FICTICIA", null, null]
+        [folioFicticio, nombre, precio, fechaChile, "FICTICIA", null, null],
       );
 
       return res.status(201).json({
@@ -590,7 +590,7 @@ exports.emitirBoleta = async (req, res) => {
           formGen,
           {
             headers: { Authorization: API_KEY, ...formGen.getHeaders() },
-          }
+          },
         );
         const dteXml = responseGen.data;
 
@@ -611,7 +611,7 @@ exports.emitirBoleta = async (req, res) => {
               FechaResolucion,
               NumeroResolucion,
             },
-          })
+          }),
         );
         formSobre.append("files", fs.createReadStream(CERT_PATH));
         formSobre.append("files", Buffer.from(dteXml, "utf-8"), {
@@ -624,7 +624,7 @@ exports.emitirBoleta = async (req, res) => {
           {
             headers: { Authorization: API_KEY, ...formSobre.getHeaders() },
             maxBodyLength: Infinity,
-          }
+          },
         );
         const sobreXml = responseSobre.data;
 
@@ -640,7 +640,7 @@ exports.emitirBoleta = async (req, res) => {
             Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
             Ambiente: 1,
             Tipo: 2,
-          })
+          }),
         );
 
         // console.log("Form envio:", formEnvio);
@@ -650,7 +650,7 @@ exports.emitirBoleta = async (req, res) => {
           formEnvio,
           {
             headers: { Authorization: API_KEY, ...formEnvio.getHeaders() },
-          }
+          },
         );
         const trackId = responseEnvio.data?.trackId;
         console.log("TrackId recibido:", trackId);
@@ -692,7 +692,7 @@ exports.emitirBoleta = async (req, res) => {
 
         // Evaluar alerta
         const [ultimaBoleta] = await db.query(
-          `SELECT folio, alerta FROM boletas ORDER BY id DESC LIMIT 1`
+          `SELECT folio, alerta FROM boletas ORDER BY id DESC LIMIT 1`,
         );
         const alertaAnterior = ultimaBoleta[0]?.alerta;
         let alertaActual = false;
@@ -704,7 +704,7 @@ exports.emitirBoleta = async (req, res) => {
             alertaActual = true;
           } else {
             console.log(
-              "Alerta ya enviada en la boleta anterior. No se envía mail nuevamente."
+              "Alerta ya enviada en la boleta anterior. No se envía mail nuevamente.",
             );
             alertaActual = true;
           }
@@ -728,14 +728,14 @@ exports.emitirBoleta = async (req, res) => {
             xmlBase64,
             trackId,
             alertaActual,
-          ]
+          ],
         );
 
         console.log(
           "Boleta guardada en base de datos con folio:",
           folioParaGuardar,
           "| alerta:",
-          alertaActual
+          alertaActual,
         );
 
         // if (!estadosValidos.includes(estado)) {
@@ -746,14 +746,14 @@ exports.emitirBoleta = async (req, res) => {
       } catch (err) {
         console.error(
           "Error en flujo de boleta:",
-          err.response?.data || err.message
+          err.response?.data || err.message,
         );
       }
     })();
   } catch (err) {
     console.error(
       "Error en flujo de boleta:",
-      err.response?.data || err.message
+      err.response?.data || err.message,
     );
 
     // Detectar si el error proviene de SimpleAPI (por límite de peticiones)
@@ -785,12 +785,12 @@ exports.emitirBoleta = async (req, res) => {
           "FICTICIA_ERROR_API",
           null,
           null,
-        ]
+        ],
       );
 
       console.log(
         "Boleta ficticia creada por error en SimpleAPI:",
-        folioFicticio
+        folioFicticio,
       );
     } catch (dbErr) {
       console.error("Error al registrar boleta ficticia:", dbErr.message);
@@ -802,13 +802,13 @@ exports.emitirBoleta = async (req, res) => {
 
       if (ahora - ultimaAlertaSimpleAPI > COOLDOWN_ALERTA_SIMPLE_API) {
         console.log(
-          "Enviando correo de alerta: límite de peticiones alcanzado..."
+          "Enviando correo de alerta: límite de peticiones alcanzado...",
         );
         // await enviarAlertaCorreoSimpleAPI(0);
         ultimaAlertaSimpleAPI = ahora;
       } else {
         console.log(
-          "Alerta de SimpleAPI ya enviada recientemente. No se envía nuevo correo."
+          "Alerta de SimpleAPI ya enviada recientemente. No se envía nuevo correo.",
         );
       }
     }
@@ -855,7 +855,7 @@ exports.emitirLoteBoletas = async (req, res) => {
 
       // Como no hay CAF, generamos y guardamos boleta ficticia de inmediato
       await db.query(
-        `INSERT INTO boletas 
+        `INSERT INTO boletas
           (folio, producto, precio, fecha, estado_sii, xml_base64, track_id, ficticia, alerta, monto_lote, cantidad_lote)
          VALUES (?, ?, ?, ?, ?, ?, ?, 1, FALSE, ?, ?)`,
         [
@@ -868,7 +868,7 @@ exports.emitirLoteBoletas = async (req, res) => {
           null,
           monto_total,
           cantidad,
-        ]
+        ],
       );
 
       return res.status(201).json({
@@ -884,7 +884,7 @@ exports.emitirLoteBoletas = async (req, res) => {
         const ruta = path.join(CAF_DIRECTORY, archivo);
         const cafXml = fs.readFileSync(ruta, "utf-8");
         const rngMatch = cafXml.match(
-          /<RNG>\s*<D>(\d+)<\/D>\s*<H>(\d+)<\/H>\s*<\/RNG>/
+          /<RNG>\s*<D>(\d+)<\/D>\s*<H>(\d+)<\/H>\s*<\/RNG>/,
         );
         if (!rngMatch) return null;
         return {
@@ -896,13 +896,17 @@ exports.emitirLoteBoletas = async (req, res) => {
       .filter(Boolean)
       .sort((a, b) => a.desde - b.desde);
 
+    // const [rows] = await db.query(
+    //   "SELECT MAX(CAST(SUBSTRING_INDEX(folio, '-', 1) AS UNSIGNED)) AS ultimo FROM boletas WHERE (ficticia IS NULL OR ficticia = 0)",
+    // );
+
     const [rows] = await db.query(
-      "SELECT MAX(CAST(SUBSTRING_INDEX(folio, '-', 1) AS UNSIGNED)) AS ultimo FROM boletas WHERE (ficticia IS NULL OR ficticia = 0)"
+      "SELECT folio FROM boletas WHERE ficticia = 0 ORDER BY id DESC LIMIT 1",
     );
 
     let siguienteFolio = Number(rows[0]?.ultimo) + 1 || 1;
     let cafActual = cafs.find(
-      (c) => siguienteFolio >= c.desde && siguienteFolio <= c.hasta
+      (c) => siguienteFolio >= c.desde && siguienteFolio <= c.hasta,
     );
 
     // Si no hay CAF que cubra el folio → folio ficticio
@@ -926,7 +930,7 @@ exports.emitirLoteBoletas = async (req, res) => {
           CAF_PATH = cafActual.ruta;
           const payload = crearPayload(
             { nombre, precio: monto_total },
-            folioLote
+            folioLote,
           );
 
           // Generar DTE XML
@@ -940,7 +944,7 @@ exports.emitirLoteBoletas = async (req, res) => {
             formGen,
             {
               headers: { Authorization: API_KEY, ...formGen.getHeaders() },
-            }
+            },
           );
 
           const dteXml = responseGen.data;
@@ -959,7 +963,7 @@ exports.emitirLoteBoletas = async (req, res) => {
                 FechaResolucion,
                 NumeroResolucion,
               },
-            })
+            }),
           );
           formSobre.append("files", fs.createReadStream(CERT_PATH));
           formSobre.append("files", Buffer.from(dteXml, "utf-8"), {
@@ -972,7 +976,7 @@ exports.emitirLoteBoletas = async (req, res) => {
             {
               headers: { Authorization: API_KEY, ...formSobre.getHeaders() },
               maxBodyLength: Infinity,
-            }
+            },
           );
 
           const sobreXml = responseSobre.data;
@@ -989,7 +993,7 @@ exports.emitirLoteBoletas = async (req, res) => {
               Certificado: { Rut: process.env.CERT_RUT, Password: CERT_PASS },
               Ambiente: 1,
               Tipo: 2,
-            })
+            }),
           );
 
           const responseEnvio = await axios.post(
@@ -997,7 +1001,7 @@ exports.emitirLoteBoletas = async (req, res) => {
             formEnvio,
             {
               headers: { Authorization: API_KEY, ...formEnvio.getHeaders() },
-            }
+            },
           );
 
           trackId = responseEnvio.data?.trackId;
@@ -1043,11 +1047,11 @@ exports.emitirLoteBoletas = async (req, res) => {
             ficticia ? 1 : 0,
             monto_total,
             cantidad,
-          ]
+          ],
         );
 
         console.log(
-          `Lote ${folioLote} insertado correctamente (estado: ${estado}, ficticia: ${ficticia})`
+          `Lote ${folioLote} insertado correctamente (estado: ${estado}, ficticia: ${ficticia})`,
         );
       } catch (err) {
         console.error("Error en envío del lote:", err.message);
@@ -1098,8 +1102,8 @@ exports.obtenerStatusSuscripcion = async (req, res) => {
 
       console.log(
         `SimpleAPI restante: ${restante}, porcentaje: ${porcentajeRestante.toFixed(
-          2
-        )}%`
+          2,
+        )}%`,
       );
 
       if (porcentajeRestante <= 15) {
@@ -1122,7 +1126,7 @@ exports.obtenerStatusSuscripcion = async (req, res) => {
   } catch (error) {
     console.error(
       "Error al consultar status de suscripción:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return res.status(500).json({
       error: "No se pudo obtener el status de la suscripción",
@@ -1143,7 +1147,7 @@ async function generarFolioFicticioUnico(db) {
     // Verificar en la base si ya existe ese folio
     const [rows] = await db.query(
       "SELECT id FROM boletas WHERE folio = ? LIMIT 1",
-      [folio]
+      [folio],
     );
     existe = rows.length > 0;
   }
