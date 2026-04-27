@@ -115,6 +115,26 @@ exports.getAllAperturasCierres = async (req, res) => {
             [...params, pageSize, offset]
         );
 
+        // Obtener detalles de retiros para los registros obtenidos
+        const ids = results.map(r => r.id);
+        if (ids.length > 0) {
+            const [retiros] = await db.query(
+                `SELECT m.*, u.username AS nombre_usuario
+                 FROM movimientos m
+                 LEFT JOIN users u ON m.id_usuario = u.id
+                 WHERE m.id_aperturas_cierres IN (?) AND m.monto < 0`,
+                [ids]
+            );
+
+            results.forEach(res => {
+                res.lista_retiros = retiros.filter(ret => ret.id_aperturas_cierres === res.id);
+            });
+        } else {
+            results.forEach(res => {
+                res.lista_retiros = [];
+            });
+        }
+
         res.json({ total, page, pageSize, data: results });
     } catch (error) {
         console.error('Error al obtener aperturas/cierres:', error);
@@ -163,7 +183,20 @@ exports.getAperturaCierreById = async (req, res) => {
             [id]
         );
         if (rows.length === 0) return res.status(404).json({ message: 'Registro no encontrado' });
-        res.json(rows[0]);
+
+        // Obtener detalles de retiros para este registro
+        const [retiros] = await db.query(
+            `SELECT m.*, u.username AS nombre_usuario
+             FROM movimientos m
+             LEFT JOIN users u ON m.id_usuario = u.id
+             WHERE m.id_aperturas_cierres = ? AND m.monto < 0`,
+            [id]
+        );
+
+        const result = rows[0];
+        result.lista_retiros = retiros;
+
+        res.json(result);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
