@@ -92,14 +92,16 @@ exports.getAllAperturasCierres = async (req, res) => {
               COALESCE(mov.total_efectivo_mov, 0) AS total_efectivo,
               COALESCE(mov.total_tarjeta_mov, 0) AS total_tarjeta,
               COALESCE(mov.total_general_mov, 0) AS total_general,
-              (ac.monto_inicial + COALESCE(mov.total_efectivo_mov, 0) - ac.total_retiros) AS balance_final
+              ABS(COALESCE(mov.total_retiros_mov, 0)) AS total_retiros,
+              (ac.monto_inicial + COALESCE(mov.total_efectivo_mov, 0) - ABS(COALESCE(mov.total_retiros_mov, 0))) AS balance_final
             FROM aperturas_cierres ac
             LEFT JOIN (
               SELECT 
                 id_aperturas_cierres,
-                SUM(CASE WHEN medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE') THEN monto ELSE 0 END) AS total_efectivo_mov,
-                SUM(CASE WHEN medio_pago = 'TARJETA' THEN monto ELSE 0 END) AS total_tarjeta_mov,
-                SUM(CASE WHEN medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE', 'TARJETA') AND id_servicio != 999 THEN monto ELSE 0 END) AS total_general_mov
+                SUM(CASE WHEN medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE') AND monto > 0 THEN monto ELSE 0 END) AS total_efectivo_mov,
+                SUM(CASE WHEN medio_pago = 'TARJETA' AND monto > 0 THEN monto ELSE 0 END) AS total_tarjeta_mov,
+                SUM(CASE WHEN medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE', 'TARJETA') AND id_servicio != 999 AND monto > 0 THEN monto ELSE 0 END) AS total_general_mov,
+                SUM(CASE WHEN monto < 0 THEN monto ELSE 0 END) AS total_retiros_mov
               FROM movimientos
               GROUP BY id_aperturas_cierres
             ) mov ON mov.id_aperturas_cierres = ac.id
@@ -140,14 +142,16 @@ exports.getAperturaCierreById = async (req, res) => {
               COALESCE(mov.total_efectivo_mov, 0) AS total_efectivo,
               COALESCE(mov.total_tarjeta_mov, 0) AS total_tarjeta,
               COALESCE(mov.total_general_mov, 0) AS total_general,
-              (ac.monto_inicial + COALESCE(mov.total_efectivo_mov, 0) - ac.total_retiros) AS balance_final
+              ABS(COALESCE(mov.total_retiros_mov, 0)) AS total_retiros,
+              (ac.monto_inicial + COALESCE(mov.total_efectivo_mov, 0) - ABS(COALESCE(mov.total_retiros_mov, 0))) AS balance_final
             FROM aperturas_cierres ac
             LEFT JOIN (
               SELECT 
                 id_aperturas_cierres,
-                SUM(CASE WHEN medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE') THEN monto ELSE 0 END) AS total_efectivo_mov,
-                SUM(CASE WHEN medio_pago = 'TARJETA' THEN monto ELSE 0 END) AS total_tarjeta_mov,
-                SUM(CASE WHEN medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE', 'TARJETA') AND id_servicio != 999 THEN monto ELSE 0 END) AS total_general_mov
+                SUM(CASE WHEN medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE') AND monto > 0 THEN monto ELSE 0 END) AS total_efectivo_mov,
+                SUM(CASE WHEN medio_pago = 'TARJETA' AND monto > 0 THEN monto ELSE 0 END) AS total_tarjeta_mov,
+                SUM(CASE WHEN medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE', 'TARJETA') AND id_servicio != 999 AND monto > 0 THEN monto ELSE 0 END) AS total_general_mov,
+                SUM(CASE WHEN monto < 0 THEN monto ELSE 0 END) AS total_retiros_mov
               FROM movimientos
               GROUP BY id_aperturas_cierres
             ) mov ON mov.id_aperturas_cierres = ac.id
