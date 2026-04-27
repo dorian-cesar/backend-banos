@@ -11,6 +11,11 @@ exports.getAllAperturasCierres = async (req, res) => {
         const filtros = [];
         const params = [];
 
+        if (req.query.id) {
+            filtros.push('ac.id = ?');
+            params.push(req.query.id);
+        }
+
         if (req.query.id_usuario_apertura) {
             filtros.push('ac.id_usuario_apertura = ?');
             params.push(req.query.id_usuario_apertura);
