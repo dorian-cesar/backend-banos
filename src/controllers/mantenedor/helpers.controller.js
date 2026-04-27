@@ -42,7 +42,7 @@ exports.getMetadata = async (req, res) => {
     }
 
     if (mediosPago === "1") {
-      result.mediosPago = ["EFECTIVO", "TARJETA"];
+      result.mediosPago = ["EFECTIVO", "TARJETA", "EFECTIVO-LOTE"];
     }
 
     res.json(result);
@@ -115,7 +115,9 @@ exports.getResumenMetadata = async (req, res) => {
     `);
     result.distribucionMediosPago = {
       EFECTIVO: Number(
-        conteoPorMedio.find((r) => r.medio_pago === "EFECTIVO")?.total || 0
+        conteoPorMedio
+          .filter((r) => ["EFECTIVO", "EFECTIVO-LOTE"].includes(r.medio_pago))
+          .reduce((acc, r) => acc + Number(r.total), 0)
       ),
       TARJETA: Number(
         conteoPorMedio.find((r) => r.medio_pago === "TARJETA")?.total || 0
@@ -129,7 +131,9 @@ exports.getResumenMetadata = async (req, res) => {
       GROUP BY medio_pago
     `);
     const efectivoTotal = Number(
-      montosPorMedio.find((r) => r.medio_pago === "EFECTIVO")?.total_monto || 0
+      montosPorMedio
+        .filter((r) => ["EFECTIVO", "EFECTIVO-LOTE"].includes(r.medio_pago))
+        .reduce((acc, r) => acc + Number(r.total_monto), 0)
     );
     const tarjetaTotal = Number(
       montosPorMedio.find((r) => r.medio_pago === "TARJETA")?.total_monto || 0
@@ -149,7 +153,9 @@ exports.getResumenMetadata = async (req, res) => {
         GROUP BY medio_pago
       `);
       const e = Number(
-        rows.find((r) => r.medio_pago === "EFECTIVO")?.total_monto || 0
+        rows
+          .filter((r) => ["EFECTIVO", "EFECTIVO-LOTE"].includes(r.medio_pago))
+          .reduce((acc, r) => acc + Number(r.total_monto), 0)
       );
       const t = Number(
         rows.find((r) => r.medio_pago === "TARJETA")?.total_monto || 0
@@ -206,7 +212,7 @@ exports.getResumenPorCaja = async (req, res) => {
         ac.fecha_cierre    AS cierre_fecha,
         ac.hora_cierre     AS cierre_hora,
 
-        COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.medio_pago = 'EFECTIVO' AND m.fecha = COALESCE(?, m.fecha) THEN m.monto END), 0) AS efectivo,
+        COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE') AND m.fecha = COALESCE(?, m.fecha) THEN m.monto END), 0) AS efectivo,
         COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.medio_pago = 'TARJETA' AND m.fecha = COALESCE(?, m.fecha) THEN m.monto END), 0) AS tarjeta,
         COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.fecha = COALESCE(?, m.fecha) THEN m.monto END), 0) AS total,
         COALESCE(SUM(CASE WHEN m.id_servicio = 999 AND m.fecha = COALESCE(?, m.fecha) THEN m.monto END), 0) AS retiros,
@@ -272,7 +278,7 @@ exports.getResumenPorCaja = async (req, res) => {
       `
       SELECT
         -- Totales generales
-        COALESCE(SUM(CASE WHEN id_servicio <> 999 AND medio_pago = 'EFECTIVO' THEN monto END), 0) AS efectivo,
+        COALESCE(SUM(CASE WHEN id_servicio <> 999 AND medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE') THEN monto END), 0) AS efectivo,
         COALESCE(SUM(CASE WHEN id_servicio <> 999 AND medio_pago = 'TARJETA'  THEN monto END), 0) AS tarjeta,
         COALESCE(SUM(CASE WHEN id_servicio <> 999 THEN monto END), 0) AS total,
         COALESCE(SUM(CASE WHEN id_servicio = 999 THEN monto END), 0) AS retiros,

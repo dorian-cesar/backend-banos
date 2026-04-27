@@ -117,7 +117,7 @@ exports.cerrarCaja = async (req, res) => {
         // Obtener totales desde la tabla movimientos CONSIDERANDO RETIROS
         const [[totales]] = await pool.execute(
             `SELECT 
-         SUM(CASE WHEN medio_pago = 'EFECTIVO' AND id_servicio != 999 THEN monto ELSE 0 END) AS total_efectivo,
+         SUM(CASE WHEN medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE') AND id_servicio != 999 THEN monto ELSE 0 END) AS total_efectivo,
          SUM(CASE WHEN medio_pago = 'TARJETA' THEN monto ELSE 0 END) AS total_tarjeta,
          SUM(CASE WHEN id_servicio = 999 THEN monto ELSE 0 END) AS total_retiros
        FROM movimientos

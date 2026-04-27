@@ -88,7 +88,7 @@ exports.getAllAperturasCierres = async (req, res) => {
             LEFT JOIN (
               SELECT 
                 id_aperturas_cierres,
-                SUM(CASE WHEN medio_pago = 'EFECTIVO' THEN monto ELSE 0 END) AS total_efectivo_mov,
+                SUM(CASE WHEN medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE') THEN monto ELSE 0 END) AS total_efectivo_mov,
                 SUM(CASE WHEN medio_pago = 'TARJETA' THEN monto ELSE 0 END) AS total_tarjeta_mov,
                 SUM(monto) AS total_general_mov
               FROM movimientos

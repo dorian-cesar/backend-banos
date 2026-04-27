@@ -27,7 +27,7 @@ async function consultarEstadoDTE(trackId) {
         TrackId: trackId,
         Ambiente: 1,
         ServidorBoletaREST: 1,
-      })
+      }),
     );
 
     const response = await axios.post(
@@ -35,7 +35,7 @@ async function consultarEstadoDTE(trackId) {
       formConsulta,
       {
         headers: { Authorization: API_KEY, ...formConsulta.getHeaders() },
-      }
+      },
     );
 
     console.log("response:", response.data);
@@ -55,7 +55,7 @@ async function consultarEstadoDTE(trackId) {
   } catch (err) {
     console.error(
       "Error consultando estado DTE:",
-      err.response?.data || err.message
+      err.response?.data || err.message,
     );
     throw err;
   }
@@ -63,7 +63,7 @@ async function consultarEstadoDTE(trackId) {
 
 // --- Ejemplo de uso ---
 (async () => {
-  const trackId = "20405988285"; // Reemplaza con tu track_id
+  const trackId = "21755494423"; // Reemplaza con tu track_id
   const estado = await consultarEstadoDTE(trackId);
   console.log(`Estado final del DTE (${trackId}):`, estado);
 })();
