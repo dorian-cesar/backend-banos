@@ -88,7 +88,11 @@ exports.getAllAperturasCierres = async (req, res) => {
               cj.nombre AS nombre_caja,
               COALESCE(mov.total_efectivo_mov, 0) AS total_efectivo_mov,
               COALESCE(mov.total_tarjeta_mov, 0) AS total_tarjeta_mov,
-              COALESCE(mov.total_general_mov, 0) AS total_general_mov
+              COALESCE(mov.total_general_mov, 0) AS total_general_mov,
+              COALESCE(mov.total_efectivo_mov, 0) AS total_efectivo,
+              COALESCE(mov.total_tarjeta_mov, 0) AS total_tarjeta,
+              COALESCE(mov.total_general_mov, 0) AS total_general,
+              (ac.monto_inicial + COALESCE(mov.total_efectivo_mov, 0) - ac.total_retiros) AS balance_final
             FROM aperturas_cierres ac
             LEFT JOIN (
               SELECT 
@@ -123,7 +127,37 @@ exports.getAllAperturasCierres = async (req, res) => {
 exports.getAperturaCierreById = async (req, res) => {
     const { id } = req.params;
     try {
-        const [rows] = await db.query('SELECT * FROM aperturas_cierres WHERE id = ?', [id]);
+        const [rows] = await db.query(
+            `
+            SELECT 
+              ac.*,
+              u1.username AS nombre_usuario_apertura,
+              u2.username AS nombre_usuario_cierre,
+              cj.nombre AS nombre_caja,
+              COALESCE(mov.total_efectivo_mov, 0) AS total_efectivo_mov,
+              COALESCE(mov.total_tarjeta_mov, 0) AS total_tarjeta_mov,
+              COALESCE(mov.total_general_mov, 0) AS total_general_mov,
+              COALESCE(mov.total_efectivo_mov, 0) AS total_efectivo,
+              COALESCE(mov.total_tarjeta_mov, 0) AS total_tarjeta,
+              COALESCE(mov.total_general_mov, 0) AS total_general,
+              (ac.monto_inicial + COALESCE(mov.total_efectivo_mov, 0) - ac.total_retiros) AS balance_final
+            FROM aperturas_cierres ac
+            LEFT JOIN (
+              SELECT 
+                id_aperturas_cierres,
+                SUM(CASE WHEN medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE') THEN monto ELSE 0 END) AS total_efectivo_mov,
+                SUM(CASE WHEN medio_pago = 'TARJETA' THEN monto ELSE 0 END) AS total_tarjeta_mov,
+                SUM(CASE WHEN medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE', 'TARJETA') AND id_servicio != 999 THEN monto ELSE 0 END) AS total_general_mov
+              FROM movimientos
+              GROUP BY id_aperturas_cierres
+            ) mov ON mov.id_aperturas_cierres = ac.id
+            LEFT JOIN users u1 ON ac.id_usuario_apertura = u1.id
+            LEFT JOIN users u2 ON ac.id_usuario_cierre = u2.id
+            JOIN cajas cj ON ac.numero_caja = cj.numero_caja
+            WHERE ac.id = ?
+            `,
+            [id]
+        );
         if (rows.length === 0) return res.status(404).json({ message: 'Registro no encontrado' });
         res.json(rows[0]);
     } catch (err) {
