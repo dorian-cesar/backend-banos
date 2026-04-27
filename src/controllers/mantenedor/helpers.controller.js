@@ -214,7 +214,7 @@ exports.getResumenPorCaja = async (req, res) => {
 
         COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE') AND m.fecha = COALESCE(?, m.fecha) THEN m.monto END), 0) AS efectivo,
         COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.medio_pago = 'TARJETA' AND m.fecha = COALESCE(?, m.fecha) THEN m.monto END), 0) AS tarjeta,
-        COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.fecha = COALESCE(?, m.fecha) THEN m.monto END), 0) AS total,
+        COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE', 'TARJETA') AND m.fecha = COALESCE(?, m.fecha) THEN m.monto END), 0) AS total,
         COALESCE(SUM(CASE WHEN m.id_servicio = 999 AND m.fecha = COALESCE(?, m.fecha) THEN m.monto END), 0) AS retiros,
         COALESCE(SUM(CASE WHEN m.id_servicio <> 999 AND m.fecha = COALESCE(?, m.fecha) THEN 1 END), 0) AS transacciones,
         MIN(CASE WHEN m.fecha = COALESCE(?, m.fecha) THEN m.hora END) AS primera_transaccion,
@@ -280,7 +280,7 @@ exports.getResumenPorCaja = async (req, res) => {
         -- Totales generales
         COALESCE(SUM(CASE WHEN id_servicio <> 999 AND medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE') THEN monto END), 0) AS efectivo,
         COALESCE(SUM(CASE WHEN id_servicio <> 999 AND medio_pago = 'TARJETA'  THEN monto END), 0) AS tarjeta,
-        COALESCE(SUM(CASE WHEN id_servicio <> 999 THEN monto END), 0) AS total,
+        COALESCE(SUM(CASE WHEN id_servicio <> 999 AND medio_pago IN ('EFECTIVO', 'EFECTIVO-LOTE', 'TARJETA') THEN monto END), 0) AS total,
         COALESCE(SUM(CASE WHEN id_servicio = 999 THEN monto END), 0) AS retiros,
         COUNT(*) AS transacciones,
         
